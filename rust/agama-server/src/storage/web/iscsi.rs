@@ -124,8 +124,26 @@ pub async fn iscsi_service<T>(dbus: &zbus::Connection) -> Result<Router<T>, Serv
         .route("/nodes/:id/login", post(login_node))
         .route("/nodes/:id/logout", post(logout_node))
         .route("/discover", post(discover))
+        .route("/config", post(set_config))
         .with_state(state);
     Ok(router)
+}
+
+/// Sets iSCSI configuration
+///
+/// the json is identical to what iscsu node in profile use.
+#[utoipa::path(
+    post,
+    path="/config",
+    context_path="/api/storage/iscsi",
+    responses(
+        (status = OK, description = "Set config succeed."),
+        (status = BAD_REQUEST, description = "It could not set the config."),
+    )
+)]
+async fn set_config(State(state): State<ISCSIState<'_>>,
+Json(config): Json<String>) -> Result<(), Error> {
+    Ok(state.client.set_config(&config).await?)
 }
 
 /// Returns the iSCSI initiator properties.

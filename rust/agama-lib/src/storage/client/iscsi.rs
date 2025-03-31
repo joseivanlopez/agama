@@ -277,6 +277,11 @@ impl<'a> ISCSIClient<'a> {
             .await?;
         Ok(proxy)
     }
+
+    pub async fn set_config(&self, value: &str) -> Result<(), ServiceError> {
+        // TOOD: write it when dbus proxy is available
+        Ok(())
+    }
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
