@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use crate::{
     dbus::{extract_id_from_path, get_property},
     error::ServiceError,
-    storage::proxies::iscsi::{InitiatorProxy, NodeProxy},
+    storage::proxies::iscsi::{ISCSIProxy, InitiatorProxy, NodeProxy},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -128,6 +128,7 @@ pub struct ISCSIClient<'a> {
     connection: zbus::Connection,
     initiator_proxy: InitiatorProxy<'a>,
     object_manager_proxy: ObjectManagerProxy<'a>,
+    iscsi_proxy: ISCSIProxy<'a>,
 }
 
 impl<'a> ISCSIClient<'a> {
@@ -144,10 +145,13 @@ impl<'a> ISCSIClient<'a> {
             .build()
             .await?;
 
+        let iscsi_proxy = ISCSIProxy::builder(&connection).build().await?;
+
         Ok(Self {
             connection,
             initiator_proxy,
             object_manager_proxy,
+            iscsi_proxy,
         })
     }
 
@@ -279,8 +283,14 @@ impl<'a> ISCSIClient<'a> {
     }
 
     pub async fn set_config(&self, value: &str) -> Result<(), ServiceError> {
-        // TOOD: write it when dbus proxy is available
-        Ok(())
+        let result = self.iscsi_proxy.set_config(value).await?;
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(ServiceError::UnsuccessfulAction(
+                "Failed to set iscsi config".to_string(),
+            )) // TODO: can we get better error?
+        }
     }
 }
 

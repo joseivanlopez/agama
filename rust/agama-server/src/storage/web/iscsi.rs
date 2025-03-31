@@ -141,8 +141,10 @@ pub async fn iscsi_service<T>(dbus: &zbus::Connection) -> Result<Router<T>, Serv
         (status = BAD_REQUEST, description = "It could not set the config."),
     )
 )]
-async fn set_config(State(state): State<ISCSIState<'_>>,
-Json(config): Json<String>) -> Result<(), Error> {
+async fn set_config(
+    State(state): State<ISCSIState<'_>>,
+    Json(config): Json<String>,
+) -> Result<(), Error> {
     Ok(state.client.set_config(&config).await?)
 }
 
