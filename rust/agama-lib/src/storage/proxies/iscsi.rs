@@ -27,7 +27,7 @@ pub use node::NodeProxy;
 use zbus::proxy;
 #[proxy(
     default_service = "org.opensuse.Agama.Storage1",
-    default_path = "/org/opensuse/Agama/Storage1",
+    default_path = "/org/opensuse/Agama/Storage1/ISCSI",
     interface = "org.opensuse.Agama.Storage1.ISCSI",
     assume_defaults = true
 )]

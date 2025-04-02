@@ -27,7 +27,7 @@
 
 use crate::{
     error::Error,
-    web::{common::EventStreams, Event},
+    web::{common::{issues_router, EventStreams}, Event},
 };
 use agama_lib::{
     dbus::{get_optional_property, to_owned_hash},
@@ -115,8 +115,12 @@ struct ISCSIState<'a> {
 ///
 /// * `dbus`: D-Bus connection to use.
 pub async fn iscsi_service<T>(dbus: &zbus::Connection) -> Result<Router<T>, ServiceError> {
+    const DBUS_SERVICE: &str = "org.opensuse.Agama.Storage1";
+    const DBUS_PATH: &str = "/org/opensuse/Agama/Storage1/ISCSI";
+
     let client = ISCSIClient::new(dbus.clone()).await?;
     let state = ISCSIState { client };
+    let issues_router = issues_router(&dbus, DBUS_SERVICE, DBUS_PATH).await?;
     let router = Router::new()
         .route("/initiator", get(initiator).patch(update_initiator))
         .route("/nodes", get(nodes))
@@ -125,6 +129,7 @@ pub async fn iscsi_service<T>(dbus: &zbus::Connection) -> Result<Router<T>, Serv
         .route("/nodes/:id/logout", post(logout_node))
         .route("/discover", post(discover))
         .route("/config", post(set_config))
+        .nest("/issues", issues_router)
         .with_state(state);
     Ok(router)
 }
