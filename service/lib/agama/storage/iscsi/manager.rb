@@ -68,6 +68,23 @@ module Agama
           @on_activate_callbacks.each(&:call)
         end
 
+        # Performs an iSCSI discovery.
+        # @note iSCSI nodes are probed again, see {#probe_after}.
+        #
+        # @param host [String] IP address
+        # @param port [Integer]
+        # @param credentials [Hash<Symbol, String>]
+        #   @option username [String]
+        #   @option password [String]
+        #   @option initiator_username [String]
+        #   @option initiator_password [String]
+        #
+        # @return [Boolean] Whether the action successes
+        def discover(host, port, credentials: {})
+          ensure_activated
+          probe_after { adapter.discover(host, port, credentials: credentials) }
+        end
+
         # Probes iSCSI.
         #
         # Callbacks are called at the end, see {#on_probe}.
@@ -97,30 +114,21 @@ module Agama
           probe_initiator
         end
 
-        # Performs an iSCSI discovery.
-        # @note iSCSI nodes are probed again, see {#probe_after}.
-        #
-        # @param host [String] IP address
-        # @param port [Integer]
-        # @param authentication [Y2IscsiClient::Authentication]
-        #
-        # @return [Boolean] Whether the action successes
-        def discover_send_targets(host, port, authentication)
-          ensure_activated
-          probe_after { adapter.discover(host, port, authentication) }
-        end
-
         # Creates a new iSCSI session.
         # @note iSCSI nodes are probed again, see {#probe_after}.
         #
         # @param node [Node]
-        # @param authentication [Y2IscsiClient::Authentication]
+        # @param credentials [Hash<Symbol, String>]
+        #   @option username [String]
+        #   @option password [String]
+        #   @option initiator_username [String]
+        #   @option initiator_password [String]
         # @param startup [String, nil] Startup status
         #
         # @return [Boolean] Whether the action successes
-        def login(node, authentication, startup: nil)
+        def login(node, credentials: {}, startup: nil)
           ensure_activated
-          result = probe_after { adapter.login(node, authentication, startup: startup) }
+          result = probe_after { adapter.login(node, credentials: credentials, startup: startup) }
           run_on_sessions_change_callbacks
           result
         end

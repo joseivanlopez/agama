@@ -36,11 +36,11 @@ module Agama
           # @see Agama::JSONImporter#imports
           def imports
             {
-              address: json[:address],
-              port: json[:port],
-              name: json[:name],
+              address:   json[:address],
+              port:      json[:port],
+              name:      json[:name],
               interface: json[:interface],
-              startup: json[:startup]
+              startup:   json[:startup]
             }
           end
         end

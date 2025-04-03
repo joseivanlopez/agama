@@ -37,7 +37,7 @@ module Agama
         def imports
           {
             initiator: json[:initiator],
-            targets: import_iscsi_targets
+            targets:   import_iscsi_targets
           }
         end
 

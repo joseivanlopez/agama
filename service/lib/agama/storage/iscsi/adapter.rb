@@ -22,6 +22,7 @@
 require "agama/storage/iscsi/initiator"
 require "agama/storage/iscsi/node"
 require "yast"
+require "y2iscsi_client/authentication"
 
 Yast.import "IscsiClientLib"
 
@@ -49,11 +50,15 @@ module Agama
         #
         # @param host [String] IP address.
         # @param port [Integer]
-        # @param authentication [Y2IscsiClient::Authentication]
+        # @param credentials [Hash<Symbol, String>]
+        #   @option username [String]
+        #   @option password [String]
+        #   @option initiator_username [String]
+        #   @option initiator_password [String]
         #
         # @return [Boolean] Whether the action successes
-        def discover(host, port, authentication)
-          Yast::IscsiClientLib.discover(host, port, authentication, silent: true)
+        def discover(host, port, credentials: {})
+          Yast::IscsiClientLib.discover(host, port, authentication(credentials), silent: true)
         end
 
         # Reads the iSCSI initiator config.
@@ -90,15 +95,19 @@ module Agama
         # Creates a new iSCSI session.
         #
         # @param node [Node]
-        # @param authentication [Y2IscsiClient::Authentication]
+        # @param credentials [Hash<Symbol, String>]
+        #   @option username [String]
+        #   @option password [String]
+        #   @option initiator_username [String]
+        #   @option initiator_password [String]
         # @param startup [String, nil]
         #
         # @return [Boolean] Whether the action successes.
-        def login(node, authentication, startup: nil)
+        def login(node, credentials: {}, startup: nil)
           startup ||= Yast::IscsiClientLib.default_startup_status
 
           Yast::IscsiClientLib.currentRecord = record_from(node)
-          Yast::IscsiClientLib.login_into_current(authentication, silent: true) &&
+          Yast::IscsiClientLib.login_into_current(authentication(credentials), silent: true) &&
             Yast::IscsiClientLib.setStartupStatus(startup)
         end
 
@@ -133,6 +142,24 @@ module Agama
         end
 
       private
+
+        # Creates an iSCSI authentication object.
+        #
+        # @param credentials [Hash<Symbole, String>]
+        #   @option username [String] Username for authentication by target
+        #   @option password [String] Password for authentication by target
+        #   @option initiator_username [String] Username for authentication by initiator
+        #   @option initiator_password [String] Password for authentication by inititator
+        #
+        # @return [Y2IscsiClient::Authentication]
+        def authentication(credentials)
+          Y2IscsiClient::Authentication.new.tap do |auth|
+            auth.username = credentials[:username]
+            auth.password = credentials[:password]
+            auth.username_in = credentials[:initiator_username]
+            auth.password_in = credentials[:initiator_password]
+          end
+        end
 
         # Creates a node from the record provided by YaST.
         #

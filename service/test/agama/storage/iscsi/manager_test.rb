@@ -192,30 +192,57 @@ describe Agama::Storage::ISCSI::Manager do
     end
   end
 
-  describe "#discover_send_targets" do
+  describe "#discover" do
     before do
       allow(Yast::IscsiClientLib).to receive(:discover)
     end
 
-    let(:auth) { Y2IscsiClient::Authentication.new }
+    it "performs iSCSI discovery without credentials" do
+      expect(Yast::IscsiClientLib).to receive(:discover) do |host, port, auth, _|
+        expect(host).to eq("192.168.100.101")
+        expect(port).to eq(3264)
+        expect(auth).to be_a(Y2IscsiClient::Authentication)
+        expect(auth.username).to be_nil
+        expect(auth.password).to be_nil
+        expect(auth.username_in).to be_nil
+        expect(auth.password_in).to be_nil
+      end
 
-    it "performs iSCSI discovery" do
-      expect(Yast::IscsiClientLib).to receive(:discover)
+      subject.discover("192.168.100.101", 3264)
+    end
 
-      subject.discover_send_targets("192.168.100.101", 3264, auth)
+    it "performs iSCSI discovery with credentials" do
+      credentials = {
+        username:           "target",
+        password:           "12345",
+        initiator_username: "initiator",
+        initiator_password: "54321"
+      }
+
+      expect(Yast::IscsiClientLib).to receive(:discover) do |host, port, auth, _|
+        expect(host).to eq("192.168.100.101")
+        expect(port).to eq(3264)
+        expect(auth).to be_a(Y2IscsiClient::Authentication)
+        expect(auth.username).to eq("target")
+        expect(auth.password).to eq("12345")
+        expect(auth.username_in).to eq("initiator")
+        expect(auth.password_in).to eq("54321")
+      end
+
+      subject.discover("192.168.100.101", 3264, credentials: credentials)
     end
 
     it "probes iSCSI" do
       expect(subject).to receive(:probe)
 
-      subject.discover_send_targets("192.168.100.101", 3264, auth)
+      subject.discover("192.168.100.101", 3264)
     end
 
     context "if iSCSI activation is not performed yet" do
       it "activates iSCSI" do
         expect(subject).to receive(:activate)
 
-        subject.discover_send_targets("192.168.100.101", 3264, auth)
+        subject.discover("192.168.100.101", 3264)
       end
     end
 
@@ -227,15 +254,13 @@ describe Agama::Storage::ISCSI::Manager do
       it "does not activate iSCSI again" do
         expect(subject).to_not receive(:activate)
 
-        subject.discover_send_targets("192.168.100.101", 3264, auth)
+        subject.discover("192.168.100.101", 3264)
       end
     end
   end
 
   describe "#login" do
     let(:node) { Agama::Storage::ISCSI::Node.new }
-
-    let(:auth) { Y2IscsiClient::Authentication.new }
 
     before do
       allow(Yast::IscsiClientLib).to receive(:default_startup_status).and_return("onboot")
@@ -254,17 +279,46 @@ describe Agama::Storage::ISCSI::Manager do
 
     let(:startup_success) { nil }
 
-    it "tries to login" do
-      expect(Yast::IscsiClientLib).to receive(:login_into_current)
+    it "tries to login without credentials" do
+      expect(Yast::IscsiClientLib).to receive(:login_into_current) do |auth, _|
+        expect(auth).to be_a(Y2IscsiClient::Authentication)
+        expect(auth.username).to be_nil
+        expect(auth.password).to be_nil
+        expect(auth.username_in).to be_nil
+        expect(auth.password_in).to be_nil
+      end.and_return(true)
 
-      subject.login(node, auth, startup: startup)
+      expect(Yast::IscsiClientLib).to receive(:setStartupStatus).with("automatic")
+
+      subject.login(node, startup: startup)
+    end
+
+    it "tries to login with credentials" do
+      credentials = {
+        username:           "target",
+        password:           "12345",
+        initiator_username: "initiator",
+        initiator_password: "54321"
+      }
+
+      expect(Yast::IscsiClientLib).to receive(:login_into_current) do |auth, _|
+        expect(auth).to be_a(Y2IscsiClient::Authentication)
+        expect(auth.username).to eq("target")
+        expect(auth.password).to eq("12345")
+        expect(auth.username_in).to eq("initiator")
+        expect(auth.password_in).to eq("54321")
+      end.and_return(true)
+
+      expect(Yast::IscsiClientLib).to receive(:setStartupStatus).with("automatic")
+
+      subject.login(node, credentials: credentials, startup: startup)
     end
 
     context "if iSCSI activation is not performed yet" do
       it "activates iSCSI" do
         expect(subject).to receive(:activate)
 
-        subject.login(node, auth, startup: startup)
+        subject.login(node)
       end
     end
 
@@ -276,7 +330,7 @@ describe Agama::Storage::ISCSI::Manager do
       it "does not activate iSCSI again" do
         expect(subject).to_not receive(:activate)
 
-        subject.login(node, auth, startup: startup)
+        subject.login(node)
       end
     end
 
@@ -289,11 +343,11 @@ describe Agama::Storage::ISCSI::Manager do
         it "probes iSCSI" do
           expect(subject).to receive(:probe)
 
-          subject.login(node, auth, startup: startup)
+          subject.login(node)
         end
 
         it "returns true" do
-          result = subject.login(node, auth, startup: startup)
+          result = subject.login(node)
 
           expect(result).to eq(true)
         end
@@ -305,11 +359,11 @@ describe Agama::Storage::ISCSI::Manager do
         it "probes iSCSI" do
           expect(subject).to receive(:probe)
 
-          subject.login(node, auth, startup: startup)
+          subject.login(node)
         end
 
         it "returns false" do
-          result = subject.login(node, auth, startup: startup)
+          result = subject.login(node)
 
           expect(result).to eq(false)
         end
@@ -398,23 +452,19 @@ describe Agama::Storage::ISCSI::Manager do
   end
 
   describe "apply_config_json" do
-    let (:config_json) do
+    let(:config_json) do
       {
         initiator: "iqn.1996-04.de.suse:01:351e6d6249",
-        targets: [
+        targets:   [
           {
             address: "",
-            port: ,
-            name: "",
-            startup: "onboot",
+            port:    11,
+            name:    "",
+            startup: "onboot"
 
           }
         ]
       }
-    end
-
-    it "works" do
-
     end
   end
 end
