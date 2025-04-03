@@ -283,7 +283,7 @@ impl<'a> ISCSIClient<'a> {
         Ok(proxy)
     }
 
-    pub async fn set_config(&self, value: &Box<RawValue>) -> Result<(), ServiceError> {
+    pub async fn set_config(&self, value: &RawValue) -> Result<(), ServiceError> {
         let result = self
             .iscsi_proxy
             .set_config(&serde_json::to_string(value)?)
