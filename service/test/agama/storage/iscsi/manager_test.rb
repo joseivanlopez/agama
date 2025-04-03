@@ -396,4 +396,25 @@ describe Agama::Storage::ISCSI::Manager do
       subject.update(node, startup: "manual")
     end
   end
+
+  describe "apply_config_json" do
+    let (:config_json) do
+      {
+        initiator: "iqn.1996-04.de.suse:01:351e6d6249",
+        targets: [
+          {
+            address: "",
+            port: ,
+            name: "",
+            startup: "onboot",
+
+          }
+        ]
+      }
+    end
+
+    it "works" do
+
+    end
+  end
 end
