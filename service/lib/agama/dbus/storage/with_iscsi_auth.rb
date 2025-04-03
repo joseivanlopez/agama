@@ -32,7 +32,7 @@ module Agama
         #   @option Username [String] Username for authentication by target
         #   @option Password [String] Password for authentication by target
         #   @option ReverseUsername [String] Username for authentication by initiator
-        #   @option ReversePassword [String] Username for authentication by inititator
+        #   @option ReversePassword [String] Password for authentication by inititator
         #
         # @return [Y2IscsiClient::Authentication]
         def iscsi_auth(dbus_options)

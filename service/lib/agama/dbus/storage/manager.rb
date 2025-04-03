@@ -374,7 +374,7 @@ module Agama
         #
         # @param value [String]
         def initiator_name=(value)
-          backend.iscsi.initiator.name = value
+          backend.iscsi.update_initiator(name: value)
         end
 
         # Whether the initiator name was set via iBFT
