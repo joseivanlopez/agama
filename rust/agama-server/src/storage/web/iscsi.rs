@@ -50,6 +50,7 @@ use axum::{
 use serde::Deserialize;
 
 mod stream;
+use serde_json::value::RawValue;
 use stream::ISCSINodeStream;
 use tokio_stream::{Stream, StreamExt};
 use zbus::{
@@ -160,6 +161,7 @@ pub async fn iscsi_service<T>(dbus: zbus::Connection) -> Result<Router<T>, Servi
     post,
     path="/config",
     context_path="/api/iscsi",
+    request_body=String, // FIXME: workaround to avoid defining schema here. Identical happens for storage set_config
     responses(
         (status = OK, description = "Set config succeed."),
         (status = BAD_REQUEST, description = "It could not set the config."),
@@ -167,7 +169,7 @@ pub async fn iscsi_service<T>(dbus: zbus::Connection) -> Result<Router<T>, Servi
 )]
 async fn set_config(
     State(state): State<ISCSIState<'_>>,
-    Json(config): Json<String>,
+    Json(config): Json<Box<RawValue>>,
 ) -> Result<(), Error> {
     Ok(state.client.set_config(&config).await?)
 }

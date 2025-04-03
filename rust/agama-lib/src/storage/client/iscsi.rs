@@ -27,6 +27,7 @@ use crate::{
     storage::proxies::iscsi::{ISCSIProxy, InitiatorProxy, NodeProxy},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use thiserror::Error;
 use zbus::{
     fdo::ObjectManagerProxy,
@@ -282,8 +283,8 @@ impl<'a> ISCSIClient<'a> {
         Ok(proxy)
     }
 
-    pub async fn set_config(&self, value: &str) -> Result<(), ServiceError> {
-        let result = self.iscsi_proxy.set_config(value).await?;
+    pub async fn set_config(&self, value: &Box<RawValue>) -> Result<(), ServiceError> {
+        let result = self.iscsi_proxy.set_config(&serde_json::to_string(value)?).await?;
         if result == 0 {
             Ok(())
         } else {
