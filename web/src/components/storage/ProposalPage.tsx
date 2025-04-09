@@ -181,6 +181,9 @@ function ProposalSections(): React.ReactNode {
   const systemErrors = useSystemErrors("storage");
   const hasResult = !systemErrors.length;
 
+  const items = (model?.drives?.length || 0) + (model?.volumeGroups?.length || 0);
+  const devicesRows = items > 1 ? 2 : 2;
+
   return (
     <Grid hasGutter>
       <ProposalTransactionalInfo />
@@ -189,7 +192,7 @@ function ProposalSections(): React.ReactNode {
       <UnsupportedModelInfo />
       {model && (
         <>
-          <GridItem sm={8}>
+          <GridItem sm={8} rowSpan={devicesRows}>
             <Page.Section
               title={_("Installation Devices")}
               description={_(
@@ -209,7 +212,7 @@ function ProposalSections(): React.ReactNode {
               <ConfigEditor />
             </Page.Section>
           </GridItem>
-          <GridItem sm={4}>
+          <GridItem sm={4} rowSpan={1}>
             <EncryptionSection />
           </GridItem>
         </>

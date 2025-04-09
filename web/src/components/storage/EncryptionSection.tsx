@@ -46,7 +46,7 @@ export default function EncryptionSection() {
         "Protection for the information stored at \
 the new file systems, including data, programs, and system files.",
       )}
-      pfCardBodyProps={{ isFilled: true }}
+      pfCardBodyProps={{ isFilled: false }}
       actions={<Link to={STORAGE.editEncryption}>{_("Edit")}</Link>}
     >
       <Card isCompact isPlain>
