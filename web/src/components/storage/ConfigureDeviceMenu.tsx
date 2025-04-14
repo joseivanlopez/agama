@@ -49,7 +49,7 @@ const DisksDrillDownMenuItem = ({
   drivesCount,
   devices,
   onDeviceClick,
-}: DisksDrillDownMenuItemProps) => {
+}: DisksDrillDownMenuItemProps): React.ReactNode => {
   const isDisabled = !devices.length;
 
   const disabledDescription = _("Already using all available disks");
@@ -105,7 +105,7 @@ const DisksDrillDownMenuItem = ({
  * share the internal logic with other potential menus that could benefit from a similar
  * approach.
  */
-export default function ConfigureDeviceMenu() {
+export default function ConfigureDeviceMenu(): React.ReactNode {
   const navigate = useNavigate();
   const model = useConfigModel({ suspense: true });
   const { addDrive } = useModel();

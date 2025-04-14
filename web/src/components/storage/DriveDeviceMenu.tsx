@@ -27,14 +27,15 @@ import MenuDeviceDescription from "./MenuDeviceDescription";
 import { useAvailableDevices } from "~/queries/storage";
 import { useDrive, useModel } from "~/queries/storage/config-model";
 import { useDrive as useDriveModel } from "~/hooks/storage/drive";
-import { useModel as useModelHook } from "~/hooks/storage/model";
 import { useConvertToVolumeGroup } from "~/hooks/storage/volume-group";
 import * as driveUtils from "~/components/storage/utils/drive";
 import { deviceBaseName, deviceLabel, formattedPath } from "~/components/storage/utils";
+import { apiModel } from "~/api/storage/types";
+import { StorageDevice } from "~/types/storage";
 import { sprintf } from "sprintf-js";
 import { _, n_, formatList } from "~/i18n";
 
-const UseOnlyOneOption = (drive) => {
+const UseOnlyOneOption = (drive: apiModel.Drive): boolean => {
   const driveModel = useDrive(drive.name);
   if (!driveModel) return false;
 
@@ -44,7 +45,12 @@ const UseOnlyOneOption = (drive) => {
   return driveUtils.hasReuse(drive);
 };
 
-const DiskSelectorTitle = ({ device, isSelected = false }) => {
+type DiskSelectorTitleProps = { device: StorageDevice; isSelected: boolean };
+
+const DiskSelectorTitle = ({
+  device,
+  isSelected = false,
+}: DiskSelectorTitleProps): React.ReactNode => {
   const Name = () => (isSelected ? <b>{deviceLabel(device)}</b> : deviceLabel(device));
   const Systems = () => (
     <Flex columnGap={{ default: "columnGapXs" }}>
@@ -64,7 +70,11 @@ const DiskSelectorTitle = ({ device, isSelected = false }) => {
   );
 };
 
-const searchSelectorMultipleOptions = (devices, selected, onChange) => {
+const searchSelectorMultipleOptions = (
+  devices: StorageDevice[],
+  selected: StorageDevice,
+  onChange: (name: StorageDevice["name"]) => void,
+): React.ReactNode[] => {
   return devices.map((device) => {
     const isSelected = device.sid === selected.sid;
 
@@ -82,7 +92,7 @@ const searchSelectorMultipleOptions = (devices, selected, onChange) => {
   });
 };
 
-const SearchSelectorSingleOption = ({ selected }) => {
+const SearchSelectorSingleOption = ({ selected }: { selected: StorageDevice }): React.ReactNode => {
   return (
     <MenuButtonItem
       isSelected
@@ -95,7 +105,12 @@ const SearchSelectorSingleOption = ({ selected }) => {
   );
 };
 
-const searchSelectorOptions = (drive, devices, selected, onChange) => {
+const searchSelectorOptions = (
+  drive: apiModel.Drive,
+  devices: StorageDevice[],
+  selected: StorageDevice,
+  onChange: (name: StorageDevice["name"]) => void,
+): React.ReactNode[] => {
   const onlyOneOption = UseOnlyOneOption(drive);
 
   if (onlyOneOption) return [<SearchSelectorSingleOption key="disk-option" selected={selected} />];
@@ -103,10 +118,20 @@ const searchSelectorOptions = (drive, devices, selected, onChange) => {
   return searchSelectorMultipleOptions(devices, selected, onChange);
 };
 
+type DisksDrillDownMenuItemProps = {
+  drive: apiModel.Drive;
+  selected: StorageDevice;
+  onDeviceClick: (name: StorageDevice["name"]) => void;
+};
+
 /**
  * Internal component holding the logic for rendering the disks drilldown menu
  */
-const DisksDrillDownMenuItem = ({ drive, selected, onDeviceClick }) => {
+const DisksDrillDownMenuItem = ({
+  drive,
+  selected,
+  onDeviceClick,
+}: DisksDrillDownMenuItemProps): React.ReactNode => {
   /** @todo Replace the useDrive hook from /queries by the hook from /hooks. */
   const volumeGroups = useDriveModel(drive.name)?.getVolumeGroups() || [];
   const onlyOneOption = UseOnlyOneOption(drive);
@@ -143,7 +168,7 @@ const DisksDrillDownMenuItem = ({ drive, selected, onDeviceClick }) => {
   };
 
   const extraText = (): string => {
-    const name = deviceBaseName(drive, 20);
+    const name = deviceBaseName(selected, 20);
 
     if (driveUtils.hasReuse(drive)) {
       // The current device will be the only option to choose from
@@ -230,7 +255,9 @@ const DisksDrillDownMenuItem = ({ drive, selected, onDeviceClick }) => {
   );
 };
 
-const RemoveDriveOption = ({ drive }) => {
+type RemoveDriveOptionProps = { drive: apiModel.Drive };
+
+const RemoveDriveOption = ({ drive }: RemoveDriveOptionProps): React.ReactNode => {
   const driveModel = useDrive(drive.name);
   const { hasAdditionalDrives } = useModel();
 
@@ -272,20 +299,22 @@ const RemoveDriveOption = ({ drive }) => {
   );
 };
 
-const NewVgOption = ({ drive }) => {
+type NewVgOptionProps = DriveDeviceMenuProps;
+
+const NewVgOption = ({ drive, selected }: NewVgOptionProps): React.ReactNode => {
   const convertToVg = useConvertToVolumeGroup();
-  const model = useModelHook();
-  const vgs = model.volumeGroups.filter((vg) => vg.targetDevices.includes(drive.name));
+  /** @todo Replace the useDrive hook from /queries by the hook from /hooks. */
+  const vgs = useDriveModel(drive.name)?.getVolumeGroups() || [];
   const mountPaths = drive.partitions.filter((p) => !p.name).map((p) => formattedPath(p.mountPath));
 
   const titleText = () => {
     if (vgs.length) {
       // TRANSLATORS: %s is the short name of a disk, like 'sda'
-      return sprintf(_("Create another LVM volume group on %s"), deviceBaseName(drive, 20));
+      return sprintf(_("Create another LVM volume group on %s"), deviceBaseName(selected, 20));
     }
 
     // TRANSLATORS: %s is the short name of a disk, like 'sda'
-    return sprintf(_("Create LVM volume group on %s"), deviceBaseName(drive, 20));
+    return sprintf(_("Create LVM volume group on %s"), deviceBaseName(selected, 20));
   };
 
   const descriptionText = () => {
@@ -317,13 +346,18 @@ const NewVgOption = ({ drive }) => {
   );
 };
 
+export type DriveDeviceMenuProps = { drive: apiModel.Drive; selected: StorageDevice };
+
 /**
  * Menu that provides options for users to configure the device used by a given drive.
  *
  * It uses a drilled-down menu approach for disks, making the available options less
  * overwhelming by presenting them in a more organized manner.
  */
-export default function DriveDeviceMenu({ drive, selected }) {
+export default function DriveDeviceMenu({
+  drive,
+  selected,
+}: DriveDeviceMenuProps): React.ReactNode {
   const driveHandler = useDrive(drive.name);
   const changeDriveTarget = (newDriveName: string) => {
     driveHandler.switch(newDriveName);
@@ -339,7 +373,7 @@ export default function DriveDeviceMenu({ drive, selected }) {
           selected={selected}
           onDeviceClick={changeDriveTarget}
         />,
-        <NewVgOption key="add-vg-option" drive={drive} />,
+        <NewVgOption key="add-vg-option" drive={drive} selected={selected} />,
         <RemoveDriveOption key="delete-disk-option" drive={drive} />,
       ]}
     >
