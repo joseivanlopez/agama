@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (c) [2023] SUSE LLC
+# Copyright (c) [2023-2025] SUSE LLC
 #
 # All Rights Reserved.
 #
@@ -30,8 +30,8 @@ require "agama/cmdline_args"
 require "agama/errors"
 require "agama/registered_addon"
 require "agama/ssl/certificate"
-require "agama/ssl/certificate_details"
 require "agama/ssl/errors"
+require "agama/ssl/fingerprint"
 require "agama/ssl/storage"
 
 Yast.import "Arch"
@@ -347,27 +347,38 @@ module Agama
       error_code = SSL::Errors.instance.ssl_error_code
       return false unless SSL::ErrorCodes::IMPORT_ERROR_CODES.include?(error_code)
 
-      details = SSL::CertificateDetails.new(cert)
-
-      question = Agama::Question.new(
-        qclass:         "registration.certificate",
-        text:           _("Secure connection error. Import certificate?"),
-        options:        [:Import, :Abort],
-        default_option: :Abort,
-        data: {
-          url: registration_url || "https://scc.suse.com",
-          error: SSL::ErrorCodes::OPENSSL_ERROR_MESSAGES[error_code],
-          subject: details.subject,
-          issuer: details.issuer,
-          summary: details.summary,
-          fingerprints: SSL::Storage.instance.fingerprints
-        }
-      )
-
+      question = certificate_question(cert)
       questions_client = Agama::DBus::Clients::Questions.new(logger: @logger)
       questions_client.ask(question) do |question_client|
         return question_client.answer == :Import
       end
+    end
+
+    def certificate_question(certificate)
+      error_code = SSL::Errors.instance.ssl_error_code
+
+      question_data = {
+        "url"                => registration_url || "https://scc.suse.com",
+        "error"              => SSL::ErrorCodes::OPENSSL_ERROR_MESSAGES[error_code],
+        "subject_name"       => certificate.subject_name,
+        "subject_org"        => certificate.subject_organization,
+        "subject_org_unit"   => certificate.subject_organization_unit,
+        "issuer_name"        => certificate.issuer_name,
+        "issuer_org"         => certificate.issuer_organization,
+        "issuer_org_unit"    => certificate.issuer_organization_unit,
+        "issue_date"         => certificate.issued_on,
+        "expiration_date"    => certificate.expires_on,
+        "sha1_fingerprint"   => certificate.fingerprint(SSL::Fingerprint::SHA1).value,
+        "sha256_fingerprint" => certificate.fingerprint(SSL::Fingerprint::SHA256).value
+      }.filter { |_, v| !v.nil? }
+
+      Agama::Question.new(
+        qclass:         "registration.certificate",
+        text:           _("Secure connection error. Trust certificate?"),
+        options:        [:Import, :Abort],
+        default_option: :Abort,
+        data:           question_data
+      )
     end
 
     # Returns the URL of the registration server
@@ -376,8 +387,9 @@ module Agama
     #
     # @return [String, nil]
     def registration_url_from_cmdline
-      cmdline_args = CmdlineArgs.read
-      cmdline_args.data["register_url"]
+      # cmdline_args = CmdlineArgs.read
+      # cmdline_args.data["register_url"]
+      "https://migration-rmt2.qe.nue2.suse.org"
     end
 
     # process a newly added service, create the credentials file and add the service to libzypp

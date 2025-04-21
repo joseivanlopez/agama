@@ -1,5 +1,5 @@
 /*
- * Copyright (c) [2022-2024] SUSE LLC
+ * Copyright (c) [2022-2025] SUSE LLC
  *
  * All Rights Reserved.
  *
@@ -26,6 +26,7 @@ import QuestionWithPassword from "~/components/questions/QuestionWithPassword";
 import LuksActivationQuestion from "~/components/questions/LuksActivationQuestion";
 import PackageErrorQuestion from "~/components/questions/PackageErrorQuestion";
 import UnsupportedAutoYaST from "~/components/questions/UnsupportedAutoYaST";
+import CertificateQuestion from "~/components/questions/CertificateQuestion";
 import { useQuestions, useQuestionsConfig, useQuestionsChanges } from "~/queries/questions";
 import { AnswerCallback, QuestionType } from "~/types/questions";
 
@@ -62,6 +63,11 @@ export default function Questions(): React.ReactNode {
   // special popup for package errors (libzypp callbacks)
   if (currentQuestion.class?.startsWith("software.package_error.")) {
     QuestionComponent = PackageErrorQuestion;
+  }
+
+  // special popup for package errors (libzypp callbacks)
+  if (currentQuestion.class === "registration.certificate") {
+    QuestionComponent = CertificateQuestion;
   }
 
   return <QuestionComponent question={currentQuestion} answerCallback={answerQuestion} />;

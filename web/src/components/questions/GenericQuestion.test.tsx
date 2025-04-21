@@ -28,9 +28,12 @@ import GenericQuestion from "~/components/questions/GenericQuestion";
 
 const question: Question = {
   id: 1,
-  text: "Do you write unit tests?",
-  options: ["always", "sometimes", "never"],
-  defaultOption: "sometimes",
+  options: ["abort", "import"],
+  data: {
+    url: "https://test.com",
+    error: "self signed",
+    issuer_name: "",
+  },
 };
 
 const answerFn = jest.fn();
