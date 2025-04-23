@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (c) [2024] SUSE LLC
+# Copyright (c) [2024-2025] SUSE LLC
 #
 # All Rights Reserved.
 #
@@ -20,703 +20,13 @@
 # find current contact information at www.suse.com.
 
 require_relative "../../../test_helper"
-require "agama/config"
-require "agama/storage/config_conversions"
+require_relative "./from_json_examples"
+require "agama/storage/configs"
+require "agama/storage/config_conversions/from_json"
 require "y2storage/encryption_method"
-require "y2storage/filesystems/mount_by_type"
-require "y2storage/filesystems/type"
-require "y2storage/pbkd_function"
 require "y2storage/refinements"
 
 using Y2Storage::Refinements::SizeCasts
-
-shared_examples "without search" do |config_proc|
-  it "does not set #search" do
-    config = config_proc.call(subject.convert)
-    expect(config.search).to be_nil
-  end
-end
-
-shared_examples "without alias" do |config_proc|
-  it "does not set #alias" do
-    config = config_proc.call(subject.convert)
-    expect(config.alias).to be_nil
-  end
-end
-
-shared_examples "without encryption" do |config_proc|
-  it "does not set #encryption" do
-    config = config_proc.call(subject.convert)
-    expect(config.encryption).to be_nil
-  end
-end
-
-shared_examples "without filesystem" do |config_proc|
-  it "does not set #filesystem" do
-    config = config_proc.call(subject.convert)
-    expect(config.filesystem).to be_nil
-  end
-end
-
-shared_examples "without ptableType" do |config_proc|
-  it "does not set #ptable_type" do
-    config = config_proc.call(subject.convert)
-    expect(config.ptable_type).to be_nil
-  end
-end
-
-shared_examples "without partitions" do |config_proc|
-  it "sets #partitions to the expected value" do
-    config = config_proc.call(subject.convert)
-    expect(config.partitions).to eq([])
-  end
-end
-
-shared_examples "without size" do |config_proc|
-  it "sets #size to default size" do
-    config = config_proc.call(subject.convert)
-    expect(config.size.default?).to eq(true)
-    expect(config.size.min).to be_nil
-    expect(config.size.max).to be_nil
-  end
-end
-
-shared_examples "without delete" do |config_proc|
-  it "sets #delete to false" do
-    config = config_proc.call(subject.convert)
-    expect(config.delete?).to eq(false)
-  end
-end
-
-shared_examples "without deleteIfNeeded" do |config_proc|
-  it "sets #delete_if_needed to false" do
-    config = config_proc.call(subject.convert)
-    expect(config.delete_if_needed?).to eq(false)
-  end
-end
-
-shared_examples "with search" do |config_proc|
-  context "with a device name" do
-    let(:search) { "/dev/vda1" }
-
-    it "sets #search to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.search).to be_a(Agama::Storage::Configs::Search)
-      expect(config.search.name).to eq("/dev/vda1")
-      expect(config.search.if_not_found).to eq(:error)
-    end
-  end
-
-  context "with an asterisk" do
-    let(:search) { "*" }
-
-    it "sets #search to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.search).to be_a(Agama::Storage::Configs::Search)
-      expect(config.search.name).to be_nil
-      expect(config.search.if_not_found).to eq(:skip)
-      expect(config.search.max).to be_nil
-    end
-  end
-
-  context "with a search section" do
-    let(:search) do
-      {
-        condition:  { name: "/dev/vda1" },
-        ifNotFound: "skip"
-      }
-    end
-
-    it "sets #search to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.search).to be_a(Agama::Storage::Configs::Search)
-      expect(config.search.name).to eq("/dev/vda1")
-      expect(config.search.if_not_found).to eq(:skip)
-      expect(config.search.max).to be_nil
-    end
-  end
-
-  context "with a search section including a max" do
-    let(:search) do
-      {
-        ifNotFound: "error",
-        max:        3
-      }
-    end
-
-    it "sets #search to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.search).to be_a(Agama::Storage::Configs::Search)
-      expect(config.search.name).to be_nil
-      expect(config.search.if_not_found).to eq(:error)
-      expect(config.search.max).to eq 3
-    end
-  end
-end
-
-shared_examples "with alias" do |config_proc|
-  let(:device_alias) { "test" }
-
-  it "sets #alias to the expected value" do
-    config = config_proc.call(subject.convert)
-    expect(config.alias).to eq("test")
-  end
-end
-
-shared_examples "with encryption" do |config_proc|
-  let(:encryption) do
-    {
-      luks2: {
-        password:     "12345",
-        keySize:      256,
-        pbkdFunction: "argon2i",
-        cipher:       "twofish",
-        label:        "test"
-      }
-    }
-  end
-
-  it "sets #encryption to the expected value" do
-    config = config_proc.call(subject.convert)
-    encryption = config.encryption
-    expect(encryption).to be_a(Agama::Storage::Configs::Encryption)
-    expect(encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-    expect(encryption.password).to eq("12345")
-    expect(encryption.key_size).to eq(256)
-    expect(encryption.pbkd_function).to eq(Y2Storage::PbkdFunction::ARGON2I)
-    expect(encryption.cipher).to eq("twofish")
-    expect(encryption.label).to eq("test")
-  end
-
-  context "if 'encryption' only specifies 'password'" do
-    let(:encryption) do
-      {
-        luks2: {
-          password: "12345"
-        }
-      }
-    end
-
-    it "sets #encryption to the expected value" do
-      config = config_proc.call(subject.convert)
-      encryption = config.encryption
-      expect(encryption).to be_a(Agama::Storage::Configs::Encryption)
-      expect(encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-      expect(encryption.password).to eq("12345")
-      expect(encryption.key_size).to be_nil
-      expect(encryption.pbkd_function).to be_nil
-      expect(encryption.cipher).to be_nil
-      expect(encryption.label).to be_nil
-    end
-  end
-
-  context "if 'encryption' is 'pervasiveLuks2'" do
-    let(:encryption) do
-      {
-        pervasiveLuks2: {
-          password: "12345"
-        }
-      }
-    end
-
-    it "sets #encryption to the expected value" do
-      config = config_proc.call(subject.convert)
-      encryption = config.encryption
-      expect(encryption).to be_a(Agama::Storage::Configs::Encryption)
-      expect(encryption.method).to eq(Y2Storage::EncryptionMethod::PERVASIVE_LUKS2)
-      expect(encryption.password).to eq("12345")
-      expect(encryption.key_size).to be_nil
-      expect(encryption.pbkd_function).to be_nil
-      expect(encryption.cipher).to be_nil
-      expect(encryption.label).to be_nil
-    end
-  end
-
-  context "if 'encryption' is 'tmpFde'" do
-    let(:encryption) do
-      {
-        tpmFde: {
-          password: "12345"
-        }
-      }
-    end
-
-    it "sets #encryption to the expected value" do
-      config = config_proc.call(subject.convert)
-      encryption = config.encryption
-      expect(encryption).to be_a(Agama::Storage::Configs::Encryption)
-      expect(encryption.method).to eq(Y2Storage::EncryptionMethod::TPM_FDE)
-      expect(encryption.password).to eq("12345")
-      expect(encryption.key_size).to be_nil
-      expect(encryption.pbkd_function).to be_nil
-      expect(encryption.cipher).to be_nil
-      expect(encryption.label).to be_nil
-    end
-  end
-end
-
-shared_examples "with filesystem" do |config_proc|
-  let(:filesystem) do
-    {
-      reuseIfPossible: true,
-      type:            "xfs",
-      label:           "test",
-      path:            "/test",
-      mountBy:         "device",
-      mkfsOptions:     ["version=2"],
-      mountOptions:    ["rw"]
-    }
-  end
-
-  it "sets #filesystem to the expected value" do
-    config = config_proc.call(subject.convert)
-    filesystem = config.filesystem
-    expect(filesystem).to be_a(Agama::Storage::Configs::Filesystem)
-    expect(filesystem.reuse?).to eq(true)
-    expect(filesystem.type.default?).to eq(false)
-    expect(filesystem.type.fs_type).to eq(Y2Storage::Filesystems::Type::XFS)
-    expect(filesystem.type.btrfs).to be_nil
-    expect(filesystem.label).to eq("test")
-    expect(filesystem.path).to eq("/test")
-    expect(filesystem.mount_by).to eq(Y2Storage::Filesystems::MountByType::DEVICE)
-    expect(filesystem.mkfs_options).to contain_exactly("version=2")
-    expect(filesystem.mount_options).to contain_exactly("rw")
-  end
-
-  context "if 'filesystem' specifies a 'type' with a btrfs section" do
-    let(:filesystem) do
-      {
-        type: {
-          btrfs: {
-            snapshots: true
-          }
-        }
-      }
-    end
-
-    it "sets #filesystem to the expected value" do
-      config = config_proc.call(subject.convert)
-      filesystem = config.filesystem
-      expect(filesystem).to be_a(Agama::Storage::Configs::Filesystem)
-      expect(filesystem.reuse?).to eq(false)
-      expect(filesystem.type.default?).to eq(false)
-      expect(filesystem.type.fs_type).to eq(Y2Storage::Filesystems::Type::BTRFS)
-      expect(filesystem.type.btrfs.snapshots?).to eq(true)
-      expect(filesystem.label).to be_nil
-      expect(filesystem.path).to be_nil
-      expect(filesystem.mount_by).to be_nil
-      expect(filesystem.mkfs_options).to eq([])
-      expect(filesystem.mount_options).to eq([])
-    end
-  end
-
-  context "if 'filesystem' is an empty section" do
-    let(:filesystem) { {} }
-
-    it "sets #filesystem to the expected value" do
-      config = config_proc.call(subject.convert)
-      filesystem = config.filesystem
-      expect(filesystem).to be_a(Agama::Storage::Configs::Filesystem)
-      expect(filesystem.reuse?).to eq(false)
-      expect(filesystem.type).to be_nil
-      expect(filesystem.label).to be_nil
-      expect(filesystem.path).to be_nil
-      expect(filesystem.mount_by).to be_nil
-      expect(filesystem.mkfs_options).to eq([])
-      expect(filesystem.mount_options).to eq([])
-    end
-  end
-end
-
-shared_examples "with ptableType" do |config_proc|
-  let(:ptableType) { "gpt" }
-
-  it "sets #ptable_type to the expected value" do
-    config = config_proc.call(subject.convert)
-    expect(config.ptable_type).to eq(Y2Storage::PartitionTables::Type::GPT)
-  end
-end
-
-shared_examples "with size" do |config_proc|
-  context "if 'size' is a string" do
-    let(:size) { "10 GiB" }
-
-    it "sets #size to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.size.default?).to eq(false)
-      expect(config.size.min).to eq(10.GiB)
-      expect(config.size.max).to eq(10.GiB)
-    end
-  end
-
-  context "if 'size' is a number" do
-    let(:size) { 3221225472 }
-
-    it "sets #size to the expected value" do
-      config = config_proc.call(subject.convert)
-      expect(config.size.default?).to eq(false)
-      expect(config.size.min).to eq(3.GiB)
-      expect(config.size.max).to eq(3.GiB)
-    end
-  end
-
-  shared_examples "min size" do
-    context "and the value is a string" do
-      let(:min_size) { "10 GiB" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(10.GiB)
-        expect(config.size.max).to eq(Y2Storage::DiskSize.unlimited)
-      end
-    end
-
-    context "and the value is a number" do
-      let(:min_size) { 3221225472 }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(3.GiB)
-        expect(config.size.max).to eq(Y2Storage::DiskSize.unlimited)
-      end
-    end
-
-    context "and the value is 'current'" do
-      let(:min_size) { "current" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to be_nil
-        expect(config.size.max).to eq(Y2Storage::DiskSize.unlimited)
-      end
-    end
-  end
-
-  shared_examples "min and max sizes" do
-    context "and the values are strings" do
-      let(:min_size) { "10 GiB" }
-      let(:max_size) { "20 GiB" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(10.GiB)
-        expect(config.size.max).to eq(20.GiB)
-      end
-    end
-
-    context "and the values are numbers" do
-      let(:min_size) { 3221225472 }
-      let(:max_size) { 10737418240 }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(3.GiB)
-        expect(config.size.max).to eq(10.GiB)
-      end
-    end
-
-    context "and the values mixes string and number" do
-      let(:min_size) { 3221225472 }
-      let(:max_size) { "10 Gib" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(3.GiB)
-        expect(config.size.max).to eq(10.GiB)
-      end
-    end
-
-    context "and the min value is 'current'" do
-      let(:min_size) { "current" }
-      let(:max_size) { "10 GiB" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to be_nil
-        expect(config.size.max).to eq(10.GiB)
-      end
-    end
-
-    context "and the max value is 'current'" do
-      let(:min_size) { "10 GiB" }
-      let(:max_size) { "current" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to eq(10.GiB)
-        expect(config.size.max).to be_nil
-      end
-    end
-
-    context "and both values are 'current'" do
-      let(:min_size) { "current" }
-      let(:max_size) { "current" }
-
-      it "sets #size to the expected value" do
-        config = config_proc.call(subject.convert)
-        expect(config.size.default?).to eq(false)
-        expect(config.size.min).to be_nil
-        expect(config.size.max).to be_nil
-      end
-    end
-  end
-
-  context "if 'size' is an array" do
-    context "and only contains one value" do
-      let(:size) { [min_size] }
-      include_examples "min size"
-    end
-
-    context "and contains two values" do
-      let(:size) { [min_size, max_size] }
-      include_examples "min and max sizes"
-    end
-  end
-
-  context "if 'size' is a hash" do
-    context "and only specifies 'min'" do
-      let(:size) { { min: min_size } }
-      include_examples "min size"
-    end
-
-    context "and specifies 'min' and 'max'" do
-      let(:size) do
-        {
-          min: min_size,
-          max: max_size
-        }
-      end
-
-      include_examples "min and max sizes"
-    end
-  end
-end
-
-shared_examples "with delete" do |config_proc|
-  it "sets #delete to true" do
-    config = config_proc.call(subject.convert)
-    expect(config.delete?).to eq(true)
-  end
-end
-
-shared_examples "with deleteIfNeeded" do |config_proc|
-  it "sets #delete_if_needed to true" do
-    config = config_proc.call(subject.convert)
-    expect(config.delete_if_needed?).to eq(true)
-  end
-end
-
-shared_examples "with partitions" do |config_proc|
-  let(:partitions) do
-    [
-      partition,
-      {
-        filesystem: { path: "/test" }
-      }
-    ]
-  end
-
-  let(:partition) do
-    {
-      filesystem: { path: "/" }
-    }
-  end
-
-  context "with an empty list" do
-    let(:partitions) { [] }
-
-    it "sets #partitions to empty" do
-      config = config_proc.call(subject.convert)
-      expect(config.partitions).to eq([])
-    end
-  end
-
-  context "with a list of partitions" do
-    it "sets #partitions to the expected value" do
-      config = config_proc.call(subject.convert)
-      partitions = config.partitions
-      expect(partitions.size).to eq(2)
-
-      partition1, partition2 = partitions
-      expect(partition1).to be_a(Agama::Storage::Configs::Partition)
-      expect(partition1.filesystem.path).to eq("/")
-      expect(partition2).to be_a(Agama::Storage::Configs::Partition)
-      expect(partition2.filesystem.path).to eq("/test")
-    end
-  end
-
-  partition_proc = proc { |c| config_proc.call(c).partitions.first }
-
-  context "if a partition does not spicify 'search'" do
-    let(:partition) { {} }
-    include_examples "without search", partition_proc
-  end
-
-  context "if a partition does not spicify 'alias'" do
-    let(:partition) { {} }
-    include_examples "without alias", partition_proc
-  end
-
-  context "if a partition does not spicify 'id'" do
-    let(:partition) { {} }
-
-    it "does not set #id" do
-      partition = partition_proc.call(subject.convert)
-      expect(partition.id).to be_nil
-    end
-  end
-
-  context "if a partition does not spicify 'size'" do
-    let(:partition) { {} }
-    include_examples "without size", partition_proc
-  end
-
-  context "if a partition does not spicify 'encryption'" do
-    let(:partition) { {} }
-    include_examples "without encryption", partition_proc
-  end
-
-  context "if a partition does not spicify 'filesystem'" do
-    let(:partition) { {} }
-    include_examples "without filesystem", partition_proc
-  end
-
-  context "if a partition does not spicify 'delete'" do
-    let(:partition) { {} }
-    include_examples "without delete", partition_proc
-  end
-
-  context "if a partition does not spicify 'deleteIfNeeded'" do
-    let(:partition) { {} }
-    include_examples "without deleteIfNeeded", partition_proc
-  end
-
-  context "if a partition specifies 'search'" do
-    let(:partition) { { search: search } }
-    include_examples "with search", partition_proc
-  end
-
-  context "if a partition specifies 'alias'" do
-    let(:partition) { { alias: device_alias } }
-    include_examples "with alias", partition_proc
-  end
-
-  context "if a partition spicifies 'id'" do
-    let(:partition) { { id: "esp" } }
-
-    it "sets #id to the expected value" do
-      partition = partition_proc.call(subject.convert)
-      expect(partition.id).to eq(Y2Storage::PartitionId::ESP)
-    end
-  end
-
-  context "if a partition spicifies 'size'" do
-    let(:partition) { { size: size } }
-    include_examples "with size", partition_proc
-  end
-
-  context "if a partition specifies 'encryption'" do
-    let(:partition) { { encryption: encryption } }
-    include_examples "with encryption", partition_proc
-  end
-
-  context "if a partition specifies 'filesystem'" do
-    let(:partition) { { filesystem: filesystem } }
-    include_examples "with filesystem", partition_proc
-  end
-
-  context "if a partition specifies 'delete'" do
-    let(:partition) { { delete: true } }
-    include_examples "with delete", partition_proc
-  end
-
-  context "if a partition specifies 'deleteIfNeeded'" do
-    let(:partition) { { deleteIfNeeded: true } }
-    include_examples "with deleteIfNeeded", partition_proc
-  end
-
-  context "if a partition specifies 'generate'" do
-    let(:partition) { { generate: generate } }
-
-    partitions_proc = proc { |c| config_proc.call(c).partitions }
-    include_examples "with generate", partitions_proc
-
-    context "with a generate section" do
-      let(:generate) do
-        {
-          partitions: "default",
-          encryption: {
-            luks2: { password: "12345" }
-          }
-        }
-      end
-
-      let(:default_paths) { ["/", "swap"] }
-
-      it "adds the expected partitions" do
-        partitions = config_proc.call(subject.convert).partitions
-        expect(partitions.size).to eq(3)
-
-        root_part = partitions.find { |p| p.filesystem.path == "/" }
-        swap_part = partitions.find { |p| p.filesystem.path == "swap" }
-        test_part = partitions.find { |p| p.filesystem.path == "/test" }
-
-        expect(root_part).to_not be_nil
-        expect(root_part.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-        expect(root_part.encryption.password).to eq("12345")
-
-        expect(swap_part).to_not be_nil
-        expect(swap_part.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-        expect(swap_part.encryption.password).to eq("12345")
-
-        expect(test_part).to_not be_nil
-        expect(test_part.encryption).to be_nil
-      end
-    end
-  end
-end
-
-shared_examples "with generate" do |configs_proc|
-  context "with 'default' value" do
-    let(:generate) { "default" }
-
-    let(:default_paths) { ["/default1", "/default2"] }
-
-    it "adds volumes for the default paths" do
-      configs = configs_proc.call(subject.convert)
-
-      default1 = configs.find { |c| c.filesystem.path == "/default1" }
-      expect(default1).to_not be_nil
-      expect(default1.encryption).to be_nil
-
-      default2 = configs.find { |c| c.filesystem.path == "/default2" }
-      expect(default2).to_not be_nil
-      expect(default2.encryption).to be_nil
-    end
-  end
-
-  context "with 'mandatory' value" do
-    let(:generate) { "mandatory" }
-
-    let(:mandatory_paths) { ["/mandatory1"] }
-
-    it "adds volumes for the mandatory paths" do
-      configs = configs_proc.call(subject.convert)
-
-      mandatory1 = configs.find { |c| c.filesystem.path == "/mandatory1" }
-      expect(mandatory1).to_not be_nil
-      expect(mandatory1.encryption).to be_nil
-    end
-  end
-end
 
 describe Agama::Storage::ConfigConversions::FromJSON do
   subject do
@@ -1321,47 +631,39 @@ describe Agama::Storage::ConfigConversions::FromJSON do
           let(:logical_volume) { { filesystem: filesystem } }
           include_examples "with filesystem", lv_proc
         end
+      end
+    end
 
-        context "if a logical volume specifies 'generate'" do
-          let(:logical_volume) { { generate: generate } }
+    shared_examples "with generate" do |configs_proc|
+      context "with 'default' value" do
+        let(:generate) { "default" }
 
-          logical_volumes_proc = proc { |c| c.volume_groups.first.logical_volumes }
-          include_examples "with generate", logical_volumes_proc
+        let(:default_paths) { ["/default1", "/default2"] }
 
-          context "with a generate section" do
-            let(:generate) do
-              {
-                logicalVolumes: "default",
-                encryption:     {
-                  luks2: { password: "12345" }
-                },
-                stripes:        8,
-                stripeSize:     "16 KiB"
-              }
-            end
+        it "adds volumes for the default paths" do
+          configs = configs_proc.call(subject.convert)
 
-            let(:default_paths) { ["/", "swap"] }
+          default1 = configs.find { |c| c.filesystem.path == "/default1" }
+          expect(default1).to_not be_nil
+          expect(default1.encryption).to be_nil
 
-            it "adds the expected logical volumes" do
-              lvs = subject.convert.volume_groups.first.logical_volumes
-              expect(lvs.size).to eq(3)
+          default2 = configs.find { |c| c.filesystem.path == "/default2" }
+          expect(default2).to_not be_nil
+          expect(default2.encryption).to be_nil
+        end
+      end
 
-              root_lv = lvs.find { |v| v.filesystem.path == "/" }
-              swap_lv = lvs.find { |v| v.filesystem.path == "swap" }
-              test_lv = lvs.find { |v| v.name == "test" }
+      context "with 'mandatory' value" do
+        let(:generate) { "mandatory" }
 
-              expect(root_lv).to_not be_nil
-              expect(root_lv.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-              expect(root_lv.encryption.password).to eq("12345")
+        let(:mandatory_paths) { ["/mandatory1"] }
 
-              expect(swap_lv).to_not be_nil
-              expect(swap_lv.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
-              expect(swap_lv.encryption.password).to eq("12345")
+        it "adds volumes for the mandatory paths" do
+          configs = configs_proc.call(subject.convert)
 
-              expect(test_lv).to_not be_nil
-              expect(test_lv.encryption).to be_nil
-            end
-          end
+          mandatory1 = configs.find { |c| c.filesystem.path == "/mandatory1" }
+          expect(mandatory1).to_not be_nil
+          expect(mandatory1.encryption).to be_nil
         end
       end
     end
@@ -1381,6 +683,50 @@ describe Agama::Storage::ConfigConversions::FromJSON do
       let(:default_paths) { ["/", "swap", "/home"] }
 
       let(:mandatory_paths) { ["/", "swap"] }
+
+      context "if a partition specifies 'generate'" do
+        let(:drives) do
+          [
+            {
+              partitions: [
+                { generate: generate }
+              ]
+            }
+          ]
+        end
+
+        partitions_proc = proc { |c| c.drives.first.partitions }
+        include_examples "with generate", partitions_proc
+
+        context "with a generate section" do
+          let(:generate) do
+            {
+              partitions: "default",
+              encryption: {
+                luks2: { password: "12345" }
+              }
+            }
+          end
+
+          let(:default_paths) { ["/", "swap"] }
+
+          it "adds the expected partitions" do
+            partitions = partitions_proc.call(subject.convert)
+            expect(partitions.size).to eq(2)
+
+            root_part = partitions.find { |p| p.filesystem.path == "/" }
+            swap_part = partitions.find { |p| p.filesystem.path == "swap" }
+
+            expect(root_part).to_not be_nil
+            expect(root_part.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
+            expect(root_part.encryption.password).to eq("12345")
+
+            expect(swap_part).to_not be_nil
+            expect(swap_part.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
+            expect(swap_part.encryption.password).to eq("12345")
+          end
+        end
+      end
 
       context "if the device already specifies any of the partitions" do
         let(:drives) do
@@ -1531,6 +877,52 @@ describe Agama::Storage::ConfigConversions::FromJSON do
       let(:default_paths) { ["/", "swap", "/home"] }
 
       let(:mandatory_paths) { ["/", "swap"] }
+
+      context "if a logical volume specifies 'generate'" do
+        let(:volume_groups) do
+          [
+            {
+              logicalVolumes: [
+                { generate: generate }
+              ]
+            }
+          ]
+        end
+
+        logical_volumes_proc = proc { |c| c.volume_groups.first.logical_volumes }
+        include_examples "with generate", logical_volumes_proc
+
+        context "with a generate section" do
+          let(:generate) do
+            {
+              logicalVolumes: "default",
+              encryption:     {
+                luks2: { password: "12345" }
+              },
+              stripes:        8,
+              stripeSize:     "16 KiB"
+            }
+          end
+
+          let(:default_paths) { ["/", "swap"] }
+
+          it "adds the expected logical volumes" do
+            lvs = logical_volumes_proc.call(subject.convert)
+            expect(lvs.size).to eq(2)
+
+            root_lv = lvs.find { |v| v.filesystem.path == "/" }
+            swap_lv = lvs.find { |v| v.filesystem.path == "swap" }
+
+            expect(root_lv).to_not be_nil
+            expect(root_lv.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
+            expect(root_lv.encryption.password).to eq("12345")
+
+            expect(swap_lv).to_not be_nil
+            expect(swap_lv.encryption.method).to eq(Y2Storage::EncryptionMethod::LUKS2)
+            expect(swap_lv.encryption.password).to eq("12345")
+          end
+        end
+      end
 
       context "if the volume group already specifies any of the logical volumes" do
         let(:volume_groups) do
