@@ -18,26 +18,128 @@
 // To contact SUSE LLC about this file by physical or electronic mail, you may
 // find current contact information at www.suse.com.
 
-use crate::supervisor::Scope;
+use crate::supervisor::{ConfigScope, Scope, SystemInfo};
+use agama_lib::install_settings::InstallSettings;
+use agama_utils::actors::Message;
 
 /// Gets the information of the underlying system.
 #[derive(Debug)]
 pub struct GetSystem;
 
-// Gets the full config.
-//
-// It includes user and default values.
+impl Message for GetSystem {
+    type Reply = SystemInfo;
+}
+
+/// Gets the full config.
+///
+/// It includes user and default values.
 #[derive(Debug)]
 pub struct GetFullConfig;
 
-// Gets a scope from the full config.
+impl Message for GetFullConfig {
+    type Reply = InstallSettings;
+}
+
+/// Gets a scope from the full config.
 #[derive(Debug)]
 pub struct GetFullConfigScope {
     pub scope: Scope,
 }
 
 impl GetFullConfigScope {
-    fn new(scope: Scope) -> Self {
+    pub fn new(scope: Scope) -> Self {
         Self { scope }
     }
+}
+
+impl Message for GetFullConfigScope {
+    type Reply = Option<ConfigScope>;
+}
+
+/// Gets the current config set by the user.
+#[derive(Debug)]
+pub struct GetConfig;
+
+impl Message for GetConfig {
+    type Reply = InstallSettings;
+}
+
+/// Replaces the config.
+#[derive(Debug)]
+pub struct SetConfig {
+    pub config: InstallSettings,
+}
+
+impl SetConfig {
+    pub fn new(config: InstallSettings) -> Self {
+        Self { config }
+    }
+}
+
+impl Message for SetConfig {
+    type Reply = ();
+}
+
+/// Updates the config.
+#[derive(Debug)]
+pub struct UpdateConfig {
+    pub config: InstallSettings,
+}
+
+impl UpdateConfig {
+    pub fn new(config: InstallSettings) -> Self {
+        Self { config }
+    }
+}
+
+impl Message for UpdateConfig {
+    type Reply = ();
+}
+
+/// Gets a scope from the config.
+#[derive(Debug)]
+pub struct GetConfigScope {
+    pub scope: Scope,
+}
+
+impl GetConfigScope {
+    pub fn new(scope: Scope) -> Self {
+        Self { scope }
+    }
+}
+
+impl Message for GetConfigScope {
+    type Reply = Option<ConfigScope>;
+}
+
+/// Sets a config scope
+#[derive(Debug)]
+pub struct SetConfigScope {
+    pub config: ConfigScope,
+}
+
+impl SetConfigScope {
+    pub fn new(config: ConfigScope) -> Self {
+        Self { config }
+    }
+}
+
+impl Message for SetConfigScope {
+    type Reply = ();
+}
+
+/// Updates a config scope
+#[derive(Debug)]
+pub struct UpdateConfigScope {
+    pub config: ConfigScope,
+}
+
+impl UpdateConfigScope {
+    pub fn new(config: ConfigScope) -> Self {
+        Self { config }
+    }
+}
+
+impl Message for UpdateConfigScope {
+    type Reply = ();
 }

@@ -26,7 +26,8 @@ use crate::supervisor::{
 };
 use agama_l10n::messages::{self, GetConfig, GetSystem, Install, SetConfig, SetSystem};
 use agama_lib::install_settings::InstallSettings;
-use agama_utils::actors::{self, ActorHandle};
+use agama_utils::actors::{self, Actor, ActorHandler, Handler};
+use async_trait::async_trait;
 use merge_struct::merge;
 use serde::Deserialize;
 use std::convert::Infallible;
@@ -96,42 +97,17 @@ pub enum Message {
     },
 }
 
-/// Handler to interact with the service.
-///
-/// It offers a set of functions that allow interacting with the supervisor service, which runs in a
-/// different Tokio task.
-#[derive(Clone)]
-pub struct Handler {
-    sender: actors::MailboxSender,
-}
-
-impl Handler {
-    pub fn new(sender: actors::MailboxSender) -> Self {
-        Self { sender }
-    }
-}
-
-impl actors::ActorHandle<Service> for Handler {
-    type Error = Error;
-
-    fn channel(&mut self) -> &mut actors::MailboxSender {
-        &mut self.sender
-    }
-}
-
-pub struct Service {
-    l10n: l10n::Handler,
+pub struct Service<T: l10n::ModelAdapter> {
+    l10n: l10n::Handler<T>,
     user_config: InstallSettings,
     config: InstallSettings,
     proposal: Option<Proposal>,
-    messages: actors::MailboxReceiver,
 }
 
-impl Service {
-    pub fn new(l10n: l10n::Handler, messages: actors::MailboxReceiver) -> Self {
+impl<T: l10n::ModelAdapter> Service<T> {
+    pub fn new(l10n: l10n::Handler<T>) -> Self {
         Self {
             l10n,
-            messages,
             config: InstallSettings::default(),
             user_config: InstallSettings::default(),
             proposal: None,
@@ -139,41 +115,28 @@ impl Service {
     }
 }
 
-impl actors::Actor for Service {
-    fn channel(&mut self) -> &mut actors::MailboxReceiver {
-        &mut self.messages
-    }
+impl<T: l10n::ModelAdapter> Actor for Service<T> {
+    type Error = Error;
 }
 
-impl actors::Handles<message::GetSystem> for Service {
-    type Reply = SystemInfo;
-    type Error = Infallible;
-
-    async fn handle(&mut self, _message: message::GetSystem) -> Result<Self::Reply, Self::Error> {
-        let l10n_system = self
-            .l10n
-            .request(l10n::messages::GetSystem {})
-            .await
-            .unwrap();
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::GetSystem> for Service<T> {
+    /// It returns the information of the underlying system.
+    async fn handle(&mut self, _message: message::GetSystem) -> Result<SystemInfo, Error> {
+        let l10n_system = self.l10n.call(l10n::messages::GetSystem {}).await.unwrap();
         Ok(SystemInfo {
             localization: l10n_system,
         })
     }
 }
 
-impl actors::Handles<message::GetFullConfig> for Service {
-    type Reply = InstallSettings;
-    type Error = Infallible;
-
-    async fn handle(
-        &mut self,
-        _message: message::GetFullConfig,
-    ) -> Result<Self::Reply, Self::Error> {
-        let l10n_config = self
-            .l10n
-            .request(l10n::messages::GetConfig {})
-            .await
-            .unwrap();
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::GetFullConfig> for Service<T> {
+    /// Gets the current configuration.
+    ///
+    /// It includes user and default values.
+    async fn handle(&mut self, _message: message::GetFullConfig) -> Result<InstallSettings, Error> {
+        let l10n_config = self.l10n.call(l10n::messages::GetConfig {}).await.unwrap();
         Ok(InstallSettings {
             localization: Some(l10n_config),
             ..Default::default()
@@ -181,107 +144,125 @@ impl actors::Handles<message::GetFullConfig> for Service {
     }
 }
 
-impl actors::Handles<message::GetFullConfigScope> for Service {
-    type Reply = Option<ConfigScope>;
-    type Error = Infallible;
-
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::GetFullConfigScope> for Service<T> {
+    /// It returns the configuration for the given scope.
     async fn handle(
         &mut self,
         message: message::GetFullConfigScope,
-    ) -> Result<Self::Reply, Self::Error> {
-        match message.scope {
+    ) -> Result<Option<ConfigScope>, Error> {
+        let option = match message.scope {
             Scope::L10n => {
-                let l10n_scope = self
-                    .config
-                    .localization
-                    .clone()
-                    .map(|c| ConfigScope::L10n(c));
-                Ok(l10n_scope)
+                let l10n_config = self.l10n.call(l10n::messages::GetConfig {}).await.unwrap();
+                Some(ConfigScope::L10n(l10n_config))
             }
-        }
+        };
+        Ok(option)
     }
 }
 
-// /// Gets the current configuration set by the user.
-// ///
-// /// It includes only the values that were set by the user.
-// pub async fn get_config(&self) -> &InstallSettings {
-//     &self.user_config
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::GetConfig> for Service<T> {
+    /// Gets the current configuration set by the user.
+    ///
+    /// It includes only the values that were set by the user.
+    async fn handle(&mut self, _message: message::GetConfig) -> Result<InstallSettings, Error> {
+        Ok(self.user_config.clone())
+    }
+}
 
-// /// Patches the user configuration with the given values.
-// ///
-// /// It merges the current configuration with the given one.
-// pub async fn patch_config(&mut self, user_config: InstallSettings) -> Result<(), Error> {
-//     let config =
-//         merge(&self.user_config, &user_config).map_err(|_| Error::CannotMergeConfig)?;
-//     self.update_config(config).await
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::SetConfig> for Service<T> {
+    /// Sets the user configuration with the given values.
+    ///
+    /// It merges the values in the top-level. Therefore, if the configuration
+    /// for a scope is not given, it keeps the previous one.
+    ///
+    /// FIXME: We should replace not given sections with the default ones.
+    /// After all, now we have config/user/:scope URLs.
+    async fn handle(&mut self, message: message::SetConfig) -> Result<(), Error> {
+        if let Some(l10n_config) = &message.config.localization {
+            self.l10n
+                .call(l10n::messages::SetConfig::new(l10n_config.clone()))
+                .await
+                .unwrap();
+        }
+        self.user_config = message.config;
+        Ok(())
+    }
+}
 
-// /// Sets the user configuration with the given values.
-// ///
-// /// It merges the values in the top-level. Therefore, if the configuration
-// /// for a scope is not given, it keeps the previous one.
-// ///
-// /// FIXME: We should replace not given sections with the default ones.
-// /// After all, now we have config/user/:scope URLs.
-// pub async fn update_config(&mut self, user_config: InstallSettings) -> Result<(), Error> {
-//     if let Some(l10n_user_config) = &user_config.localization {
-//         self.l10n
-//             .send(SetConfig::new(l10n_user_config.clone()))
-//             .unwrap();
-//         // self.l10n.set_config(l10n_user_config).await?;
-//     }
-//     self.user_config = user_config;
-//     Ok(())
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::UpdateConfig> for Service<T> {
+    /// Patches the user configuration with the given values.
+    ///
+    /// It merges the current configuration with the given one.
+    async fn handle(&mut self, message: message::UpdateConfig) -> Result<(), Error> {
+        let config =
+            merge(&self.user_config, &message.config).map_err(|_| Error::CannotMergeConfig)?;
+        self.handle(message::SetConfig::new(config)).await
+    }
+}
 
-// /// It returns the configuration set by the user for the given scope.
-// ///
-// /// * scope: scope to get the configuration for.
-// pub async fn get_config_scope(&self, scope: Scope) -> Option<ConfigScope> {
-//     // FIXME: implement this logic at InstallSettings level: self.get_config().by_scope(...)
-//     // It would allow us to drop this method.
-//     match scope {
-//         Scope::L10n => self
-//             .user_config
-//             .localization
-//             .clone()
-//             .map(|c| ConfigScope::L10n(c)),
-//     }
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::GetConfigScope> for Service<T> {
+    /// It returns the configuration set by the user for the given scope.
+    async fn handle(
+        &mut self,
+        message: message::GetConfigScope,
+    ) -> Result<Option<ConfigScope>, Error> {
+        // FIXME: implement this logic at InstallSettings level: self.get_config().by_scope(...)
+        // It would allow us to drop this method.
+        let option = match message.scope {
+            Scope::L10n => self
+                .user_config
+                .localization
+                .clone()
+                .map(|c| ConfigScope::L10n(c)),
+        };
+        Ok(option)
+    }
+}
 
-// /// Patches the user configuration within the given scope.
-// ///
-// /// It merges the current configuration with the given one.
-// pub async fn patch_config_scope(&mut self, user_config: ConfigScope) -> Result<(), Error> {
-//     match user_config {
-//         ConfigScope::L10n(new_config) => {
-//             let base_config = self.user_config.localization.clone().unwrap_or_default();
-//             let config =
-//                 merge(&base_config, &new_config).map_err(|_| Error::CannotMergeConfig)?;
-//             // FIXME: we are doing pattern matching twice. Is it ok?
-//             // Implementing a "merge" for ScopeConfig would allow to simplify this function.
-//             self.update_config_scope(ConfigScope::L10n(config)).await?;
-//         }
-//     }
-//     Ok(())
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::SetConfigScope> for Service<T> {
+    /// Sets the user configuration within the given scope.
+    ///
+    /// It replaces the current configuration with the given one and calculates a
+    /// new proposal. Only the configuration in the given scope is affected.
+    async fn handle(&mut self, message: message::SetConfigScope) -> Result<(), Error> {
+        match message.config {
+            ConfigScope::L10n(l10n_config) => {
+                self.l10n
+                    .call(SetConfig::new(l10n_config.clone()))
+                    .await
+                    .unwrap();
+                self.user_config.localization = Some(l10n_config);
+            }
+        }
+        Ok(())
+    }
+}
 
-// /// Sets the user configuration within the given scope.
-// ///
-// /// It replaces the current configuration with the given one and calculates a
-// /// new proposal. Only the configuration in the given scope is affected.
-// pub async fn update_config_scope(&mut self, user_config: ConfigScope) -> Result<(), Error> {
-//     match user_config {
-//         ConfigScope::L10n(new_config) => {
-//             // self.l10n.set_config(&new_config).await?;
-//             self.l10n.send(SetConfig::new(new_config.clone())).unwrap();
-//             self.user_config.localization = Some(new_config);
-//         }
-//     }
-//     Ok(())
-// }
+#[async_trait]
+impl<T: l10n::ModelAdapter> Handler<message::UpdateConfigScope> for Service<T> {
+    /// Patches the user configuration within the given scope.
+    ///
+    /// It merges the current configuration with the given one.
+    async fn handle(&mut self, message: message::UpdateConfigScope) -> Result<(), Error> {
+        match message.config {
+            ConfigScope::L10n(l10n_config) => {
+                let base_config = self.user_config.localization.clone().unwrap_or_default();
+                let config =
+                    merge(&base_config, &l10n_config).map_err(|_| Error::CannotMergeConfig)?;
+                self.handle(message::SetConfigScope::new(ConfigScope::L10n(config)))
+                    .await
+                    .unwrap();
+            }
+        }
+        Ok(())
+    }
+}
 
 // /// It returns the current proposal, if any.
 // pub async fn get_proposal(&self) -> Option<&Proposal> {
