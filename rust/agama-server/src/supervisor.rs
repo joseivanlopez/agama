@@ -21,11 +21,10 @@
 mod error;
 pub use error::Error;
 
-pub mod handler;
-pub use handler::Handler;
+pub mod service;
+pub use service::{Action, Handler};
 
-mod service;
-pub use service::Action;
+pub mod message;
 
 mod scope;
 pub use scope::{ConfigScope, Scope};
