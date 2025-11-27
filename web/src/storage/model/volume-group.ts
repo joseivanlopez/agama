@@ -20,28 +20,12 @@
  * find current contact information at www.suse.com.
  */
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { solveStorageModel, getStorageModel } from "~/api";
+import { sift } from "radashi";
 import type { model } from "~/api/storage";
 
-const storageModelQuery = {
-  queryKey: ["storageModel"],
-  queryFn: getStorageModel,
-};
-
-function useStorageModel(): model.Config | null {
-  return useSuspenseQuery(storageModelQuery)?.data;
+function mountPaths(md: model.VolumeGroup): string[] {
+  const mountPaths = md.logicalVolumes?.map((l) => l.mountPath);
+  return sift(mountPaths);
 }
 
-const solvedStorageModelQuery = (model?: model.Config) => ({
-  queryKey: ["solvedStorageModel", JSON.stringify(model)],
-  queryFn: () => (model ? solveStorageModel(model) : Promise.resolve(null)),
-  staleTime: Infinity,
-});
-
-function useSolvedStorageModel(model?: model.Config): model.Config | null {
-  return useSuspenseQuery(solvedStorageModelQuery(model))?.data;
-}
-
-export { storageModelQuery, useStorageModel, useSolvedStorageModel };
-export * as model from "~/hooks/api/storage/model";
+export { mountPaths };

@@ -20,39 +20,21 @@
  * find current contact information at www.suse.com.
  */
 
-import { useCallback } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { storageModelQuery } from "~/hooks/api/storage";
-import { useSystem } from "~/hooks/api/system/storage";
-import { buildModel } from "~/storage/model";
 import { mountPaths } from "~/storage/api-model";
-import type { model as apiModel } from "~/api/storage";
-import type { model } from "~/storage";
+import type { model } from "~/api/storage";
 
-const build = (data: apiModel.Config | null): model.Model | null =>
-  data ? buildModel(data) : null;
+function selectMountPaths(data: model.Config | null): string[] {
+  return data ? mountPaths(data) : [];
+}
 
-function useModel(): model.Model | null {
+function useMountPaths(): string[] {
   const { data } = useSuspenseQuery({
     ...storageModelQuery,
-    select: build,
+    select: selectMountPaths,
   });
   return data;
 }
 
-function useMissingMountPaths(): string[] {
-  const productMountPoints = useSystem()?.productMountPoints;
-  const { data } = useSuspenseQuery({
-    ...storageModelQuery,
-    select: useCallback(
-      (data: apiModel.Config | null): string[] => {
-        const currentMountPaths = data ? mountPaths(data) : [];
-        return (productMountPoints || []).filter((p) => !currentMountPaths.includes(p));
-      },
-      [productMountPoints],
-    ),
-  });
-  return data;
-}
-
-export { useModel, useMissingMountPaths };
+export { storageModelQuery, useMountPaths };

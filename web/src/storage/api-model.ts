@@ -20,6 +20,10 @@
  * find current contact information at www.suse.com.
  */
 
+import * as drive from "~/storage/model/drive";
+import * as mdRaid from "~/storage/model/md-raid";
+import * as volumeGroup from "~/storage/model/volume-group";
+import { sift } from "radashi";
 import type { model } from "~/api/storage";
 import type { data } from "~/storage";
 
@@ -105,7 +109,18 @@ function buildPartitionFromLogicalVolume(lv: model.LogicalVolume): model.Partiti
   };
 }
 
+function mountPaths(model: model.Config): string[] {
+  const drivesMountPaths = model.drives?.flatMap((d) => drive.mountPaths(d));
+  const mdMountPaths = model.mdRaids?.flatMap((m) => mdRaid.mountPaths(m));
+  const vgMountPaths = model.volumeGroups?.flatMap((v) => volumeGroup.mountPaths(v));
+  return sift([drivesMountPaths, mdMountPaths, vgMountPaths].flat());
+}
+
 export {
+  drive,
+  mdRaid,
+  volumeGroup,
+  mountPaths,
   copyApiModel,
   findDevice,
   findDeviceIndex,

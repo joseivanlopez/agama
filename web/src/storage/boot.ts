@@ -21,11 +21,12 @@
  */
 
 import { copyApiModel } from "~/storage/api-model";
+import { mountPaths } from "~/storage/model/partitionable";
 import type { model } from "~/storage";
 import type { model as apiModel } from "~/api/storage";
 
 function isUsed(device: model.Drive | model.MdRaid): boolean {
-  return device.isTargetDevice || device.getMountPaths().length > 0;
+  return device.isTargetDevice || mountPaths(device).length > 0;
 }
 
 function removeDevice(

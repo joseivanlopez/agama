@@ -66,6 +66,7 @@ import { sprintf } from "sprintf-js";
 import { STORAGE as PATHS, STORAGE } from "~/routes/paths";
 import { isUndefined, unique } from "radashi";
 import { compact } from "~/utils";
+import { useMountPaths } from "~/hooks/api/storage/model";
 import type { model } from "~/api/storage";
 import type { storage as system } from "~/api/system";
 
@@ -289,8 +290,7 @@ function useUsableFilesystems(mountPoint: string): string[] {
 }
 
 function useMountPointError(value: FormValue): Error | undefined {
-  const model = useModel();
-  const mountPoints = model?.getMountPaths() || [];
+  const mountPoints = useMountPaths();
   const initialPartitionConfig = useInitialPartitionConfig();
   const mountPoint = value.mountPoint;
 

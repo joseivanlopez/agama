@@ -33,6 +33,7 @@ import { _, formatList } from "~/i18n";
 import DeviceSelectorModal from "./DeviceSelectorModal";
 import { MenuItemProps } from "@patternfly/react-core";
 import { isDrive } from "~/storage/device";
+import { mountPaths } from "~/storage/model/partitionable";
 import type { model } from "~/storage";
 import type { Model } from "~/storage/model";
 import type { storage } from "~/api/system";
@@ -43,17 +44,16 @@ const useOnlyOneOption = (device: model.Drive | model.MdRaid): boolean => {
   if (device.filesystem && device.filesystem.reuse) return true;
 
   const { isTargetDevice, isExplicitBoot } = device;
-  if (!device.getMountPaths().length && (isTargetDevice || isExplicitBoot)) return true;
+  if (!mountPaths(device).length && (isTargetDevice || isExplicitBoot)) return true;
 
   return device.isReusingPartitions;
 };
 
-type ChangeDeviceMenuItemProps = {
+type ChangeDeviceTitleProps = {
   modelDevice: model.Drive | model.MdRaid;
-  device: storage.Device;
-} & MenuItemProps;
+};
 
-const ChangeDeviceTitle = ({ modelDevice }) => {
+const ChangeDeviceTitle = ({ modelDevice }: ChangeDeviceTitleProps) => {
   const onlyOneOption = useOnlyOneOption(modelDevice);
   if (onlyOneOption) {
     return _("Selected disk cannot be changed");
@@ -64,14 +64,14 @@ const ChangeDeviceTitle = ({ modelDevice }) => {
     return sprintf(_("Change the disk to format as %s"), formattedPath(modelDevice.mountPath));
   }
 
-  const mountPaths = modelDevice.getMountPaths();
-  const hasMountPaths = mountPaths.length > 0;
+  const deviceMountPaths = mountPaths(modelDevice);
+  const hasMountPaths = deviceMountPaths.length > 0;
 
   if (!hasMountPaths) {
     return _("Change the disk to configure");
   }
 
-  if (mountPaths.includes("/")) {
+  if (deviceMountPaths.includes("/")) {
     return _("Change the disk to install the system");
   }
 
@@ -87,13 +87,18 @@ const ChangeDeviceTitle = ({ modelDevice }) => {
   );
 };
 
-const ChangeDeviceDescription = ({ modelDevice, device }) => {
+type ChangeDeviceDescriptionProps = {
+  modelDevice: model.Drive | model.MdRaid;
+  device: storage.Device;
+};
+
+const ChangeDeviceDescription = ({ modelDevice, device }: ChangeDeviceDescriptionProps) => {
   const name = baseName(device);
   const volumeGroups = modelDevice.getVolumeGroups() || [];
   const isBoot = modelDevice.isBoot;
   const isExplicitBoot = modelDevice.isExplicitBoot;
-  const mountPaths = modelDevice.getMountPaths();
-  const hasMountPaths = mountPaths.length > 0;
+  const deviceMountPaths = mountPaths(modelDevice);
+  const hasMountPaths = deviceMountPaths.length > 0;
   const hasPv = volumeGroups.length > 0;
   const vgName = volumeGroups[0]?.vgName;
 
@@ -173,6 +178,11 @@ const ChangeDeviceDescription = ({ modelDevice, device }) => {
   }
 };
 
+type ChangeDeviceMenuItemProps = {
+  modelDevice: model.Drive | model.MdRaid;
+  device: storage.Device;
+} & MenuItemProps;
+
 /**
  * Internal component holding the presentation of the option to change the device
  */
@@ -231,7 +241,7 @@ const RemoveEntryOption = ({ device, onClick }: RemoveEntryOptionProps): React.R
 
   // If these cases, the target device cannot be changed and this disabled button would only provide
   // information that is redundant to the one already displayed at the disabled "change device" one.
-  if (!device.getMountPaths().length && (hasPv || isExplicitBoot)) return;
+  if (!mountPaths(device).length && (hasPv || isExplicitBoot)) return;
 
   if (isExplicitBoot) {
     if (hasPv) {

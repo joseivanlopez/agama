@@ -26,6 +26,7 @@
  * Types that extend the apiModel by adding calculated properties and methods.
  */
 
+import { mountPaths } from "~/storage/model/partitionable";
 import type { model as apiModel } from "~/api/storage";
 
 type Model = {
@@ -33,7 +34,6 @@ type Model = {
   drives: Drive[];
   mdRaids: MdRaid[];
   volumeGroups: VolumeGroup[];
-  getMountPaths: () => string[];
 };
 
 interface Boot extends Omit<apiModel.Boot, "device"> {
@@ -56,7 +56,6 @@ interface Drive extends Omit<apiModel.Drive, "partitions"> {
   isTargetDevice: boolean;
   isBoot: boolean;
   partitions: Partition[];
-  getMountPaths: () => string[];
   getVolumeGroups: () => VolumeGroup[];
   getPartition: (path: string) => Partition | undefined;
   getConfiguredExistingPartitions: () => Partition[];
@@ -72,7 +71,6 @@ interface MdRaid extends Omit<apiModel.MdRaid, "partitions"> {
   isTargetDevice: boolean;
   isBoot: boolean;
   partitions: Partition[];
-  getMountPaths: () => string[];
   getVolumeGroups: () => VolumeGroup[];
   getPartition: (path: string) => Partition | undefined;
   getConfiguredExistingPartitions: () => Partition[];
@@ -90,7 +88,6 @@ interface VolumeGroup extends Omit<apiModel.VolumeGroup, "targetDevices" | "logi
   listIndex: number;
   logicalVolumes: LogicalVolume[];
   getTargetDevices: () => Drive[];
-  getMountPaths: () => string[];
 }
 
 type LogicalVolume = apiModel.LogicalVolume;
@@ -151,11 +148,6 @@ function partitionableProperties(
 
   const partitions = buildPartitions();
 
-  const getMountPaths = (): string[] => {
-    const mountPaths = (apiDevice.partitions || []).map((p) => p.mountPath);
-    return [apiDevice.mountPath, ...mountPaths].filter((p) => p);
-  };
-
   const getVolumeGroups = (): VolumeGroup[] => {
     return model.volumeGroups.filter((v) =>
       v.getTargetDevices().some((d) => d.name === apiDevice.name),
@@ -180,7 +172,7 @@ function partitionableProperties(
   };
 
   const isUsed = (): boolean => {
-    return isExplicitBoot() || isTargetDevice() || getMountPaths().length > 0;
+    return isExplicitBoot() || isTargetDevice() || mountPaths(apiDevice).length > 0;
   };
 
   const isAddingPartitions = (): boolean => {
@@ -206,7 +198,6 @@ function partitionableProperties(
     isBoot: isBoot(),
     isExplicitBoot: isExplicitBoot(),
     partitions,
-    getMountPaths,
     getVolumeGroups,
     getPartition,
     getConfiguredExistingPartitions,
@@ -256,10 +247,6 @@ function buildVolumeGroup(
 ): VolumeGroup {
   const list = "volumeGroups";
 
-  const getMountPaths = (): string[] => {
-    return (apiVolumeGroup.logicalVolumes || []).map((l) => l.mountPath).filter((p) => p);
-  };
-
   const buildLogicalVolumes = (): LogicalVolume[] => {
     return (apiVolumeGroup.logicalVolumes || []).map(buildLogicalVolume);
   };
@@ -273,7 +260,6 @@ function buildVolumeGroup(
     logicalVolumes: buildLogicalVolumes(),
     list,
     listIndex,
-    getMountPaths,
     getTargetDevices,
   };
 }
@@ -290,7 +276,6 @@ function buildModel(apiModel: apiModel.Config): Model {
     drives: [],
     mdRaids: [],
     volumeGroups: [],
-    getMountPaths: () => [],
   };
 
   const buildDrives = (): Drive[] => {
@@ -305,20 +290,11 @@ function buildModel(apiModel: apiModel.Config): Model {
     return (apiModel.volumeGroups || []).map((v, i) => buildVolumeGroup(v, i, model));
   };
 
-  const withMountPaths = (): (Drive | MdRaid | VolumeGroup)[] => {
-    return [...model.drives, ...model.mdRaids, ...model.volumeGroups];
-  };
-
-  const getMountPaths = (): string[] => {
-    return withMountPaths().flatMap((d) => d.getMountPaths());
-  };
-
   // Important! Modify the model object instead of assigning a new one.
   model.boot = buildBoot(apiModel, model);
   model.drives = buildDrives();
   model.mdRaids = buildMdRaids();
   model.volumeGroups = buildVolumeGroups();
-  model.getMountPaths = getMountPaths;
   return model;
 }
 

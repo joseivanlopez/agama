@@ -52,7 +52,7 @@ import SelectTypeaheadCreatable from "~/components/core/SelectTypeaheadCreatable
 import AutoSizeText from "~/components/storage/AutoSizeText";
 import { deviceSize, filesystemLabel, parseToBytes } from "~/components/storage/utils";
 import { useSolvedStorageModel, useStorageModel } from "~/hooks/api/storage";
-import { useModel, useMissingMountPaths } from "~/hooks/storage/model";
+import { useMissingMountPaths } from "~/hooks/storage/model";
 import { useVolumeTemplate } from "~/hooks/api/system/storage";
 import { useVolumeGroup } from "~/hooks/storage/volume-group";
 import { useAddLogicalVolume, useEditLogicalVolume } from "~/hooks/storage/logical-volume";
@@ -64,6 +64,7 @@ import { compact } from "~/utils";
 import { sprintf } from "sprintf-js";
 import { _ } from "~/i18n";
 import SizeModeSelect, { SizeMode, SizeRange } from "~/components/storage/SizeModeSelect";
+import { useMountPaths } from "~/hooks/api/storage/model";
 import type { model } from "~/api/storage";
 import type { data } from "~/storage";
 
@@ -229,8 +230,7 @@ function useUsableFilesystems(mountPoint: string): string[] {
 }
 
 function useMountPointError(value: FormValue): Error | undefined {
-  const model = useModel();
-  const mountPoints = model?.getMountPaths() || [];
+  const mountPoints = useMountPaths();
   const initialLogicalVolume = useInitialLogicalVolume();
   const mountPoint = value.mountPoint;
 

@@ -58,6 +58,7 @@ import { sprintf } from "sprintf-js";
 import { STORAGE as PATHS } from "~/routes/paths";
 import { unique } from "radashi";
 import { compact } from "~/utils";
+import { useMountPaths } from "~/hooks/api/storage/model";
 import type { model as apiModel } from "~/api/storage";
 import type { storage as system } from "~/api/system";
 
@@ -202,8 +203,7 @@ function useUsableFilesystems(mountPoint: string): string[] {
 }
 
 function useMountPointError(value: FormValue): Error | undefined {
-  const model = useModel();
-  const mountPoints = model?.getMountPaths() || [];
+  const mountPoints = useMountPaths();
   const deviceModel = useDeviceModel();
   const mountPoint = value.mountPoint;
 
