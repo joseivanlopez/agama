@@ -20,294 +20,280 @@
  * find current contact information at www.suse.com.
  */
 
-/*
- * NOTE: this test is not useful. The ProposalPage loads several queries but,
- * perhaps, each nested component should be responsible for loading the
- * information they need.
- */
 import React from "react";
-import { screen } from "@testing-library/react";
-import { installerRender } from "~/test-utils";
-import ProposalPage from "~/components/storage/ProposalPage";
-import { StorageDevice } from "~/storage";
-import { Issue, IssueSeverity, IssueSource } from "~/model/issue";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const disk: StorageDevice = {
-  sid: 60,
-  type: "disk",
-  isDrive: true,
-  description: "",
-  vendor: "Seagate",
-  model: "Unknown",
-  driver: ["ahci", "mmcblk"],
-  bus: "IDE",
-  name: "/dev/vda",
-  size: 1e6,
-};
+import ProposalPage from "./ProposalPage";
+import { useAvailableDevices } from "~/hooks/api/system/storage";
+import { useIssues } from "~/hooks/api/issue";
+import { useProposal } from "~/hooks/api/proposal/storage";
+import { useStorageModel } from "~/hooks/api/storage";
+import { useProgress } from "~/queries/progress";
+import { useLocation } from "react-router";
+import { useStorageUiState } from "~/context/storage-ui-state";
+import { useZFCPSupported } from "~/queries/storage/zfcp";
+import { useDASDSupported } from "~/queries/storage/dasd";
+import { useReset } from "~/hooks/api/config/storage";
+import { useSystem } from "~/hooks/api/system";
+import { useProduct } from "~/hooks/api/config";
 
-const systemError: Issue = {
-  description: "System error",
-  kind: "storage",
-  details: "",
-  source: IssueSource.System,
-  severity: IssueSeverity.Error,
-  scope: "storage",
-};
-
-const configError: Issue = {
-  description: "Config error",
-  kind: "storage",
-  details: "",
-  source: IssueSource.Config,
-  severity: IssueSeverity.Error,
-  scope: "storage",
-};
-
-const mockUseAvailableDevices = jest.fn();
-const mockUseResetConfigMutation = jest.fn();
-const mockUseDeprecated = jest.fn();
-const mockUseDeprecatedChanges = jest.fn();
-const mockUseReprobeMutation = jest.fn();
-jest.mock("~/queries/storage", () => ({
-  ...jest.requireActual("~/queries/storage"),
-  useResetConfigMutation: () => mockUseResetConfigMutation(),
-  useDeprecated: () => mockUseDeprecated(),
-  useDeprecatedChanges: () => mockUseDeprecatedChanges(),
-  useReprobeMutation: () => mockUseReprobeMutation(),
-}));
-
-jest.mock("~/hooks/storage/system", () => ({
-  ...jest.requireActual("~/hooks/storage/system"),
-  useAvailableDevices: () => mockUseAvailableDevices(),
-}));
-
-const mockUseConfigModel = jest.fn();
-jest.mock("~/queries/storage/config-model", () => ({
-  ...jest.requireActual("~/queries/storage/config-model"),
-  useConfigModel: () => mockUseConfigModel(),
-}));
-
-const mockUseZFCPSupported = jest.fn();
-jest.mock("~/queries/storage/zfcp", () => ({
-  ...jest.requireActual("~/queries/storage/zfcp"),
-  useZFCPSupported: () => mockUseZFCPSupported(),
-}));
-
-const mockUseDASDSupported = jest.fn();
-jest.mock("~/queries/storage/dasd", () => ({
-  ...jest.requireActual("~/queries/storage/dasd"),
-  useDASDSupported: () => mockUseDASDSupported(),
-}));
-
-const mockUseSystemErrors = jest.fn();
-const mockUseConfigErrors = jest.fn();
-jest.mock("~/queries/issues", () => ({
-  ...jest.requireActual("~/queries/issues"),
-  useSystemErrors: () => mockUseSystemErrors(),
-  useConfigErrors: () => mockUseConfigErrors(),
-}));
-
-jest.mock("./ProposalTransactionalInfo", () => () => <div>trasactional info</div>);
-jest.mock("./ProposalFailedInfo", () => () => <div>failed info</div>);
-jest.mock("./UnsupportedModelInfo", () => () => <div>unsupported info</div>);
-jest.mock("./ProposalResultSection", () => () => <div>result</div>);
-jest.mock("./ConfigEditor", () => () => <div>installation devices</div>);
-jest.mock("./EncryptionSection", () => () => <div>encryption section</div>);
-jest.mock("./BootSection", () => () => <div>boot section</div>);
-jest.mock("~/components/product/ProductRegistrationAlert", () => () => (
-  <div>registration alert</div>
-));
-
-beforeEach(() => {
-  mockUseResetConfigMutation.mockReturnValue({ mutate: jest.fn() });
-  mockUseReprobeMutation.mockReturnValue({ mutateAsync: jest.fn() });
-  mockUseDeprecated.mockReturnValue(false);
-  mockUseSystemErrors.mockReturnValue([]);
-  mockUseConfigErrors.mockReturnValue([]);
+const testQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
 });
 
-describe("if there are not devices", () => {
-  beforeEach(() => {
-    mockUseAvailableDevices.mockReturnValue([]);
-  });
+const render = (ui: React.ReactElement) =>
+  rtlRender(
+    <QueryClientProvider client={testQueryClient}>
+      <React.Suspense fallback={<p>loading</p>}>{ui}</React.Suspense>
+    </QueryClientProvider>,
+  );
 
-  it("renders an option for activating iSCSI", () => {
-    installerRender(<ProposalPage />);
-    expect(screen.queryByRole("link", { name: /iSCSI/ })).toBeInTheDocument();
-  });
+// Mocking hooks
+jest.mock("~/hooks/api/system/storage");
+jest.mock("~/hooks/api/issue");
+jest.mock("~/hooks/api/config/storage");
+jest.mock("~/hooks/api/proposal/storage");
+jest.mock("~/hooks/api/storage");
+jest.mock("~/hooks/api/system");
+jest.mock("~/hooks/api/config");
+jest.mock("~/queries/storage/zfcp");
+jest.mock("~/queries/storage/dasd");
+jest.mock("~/queries/progress");
 
-  it("does not render the installation devices", () => {
-    installerRender(<ProposalPage />);
-    expect(screen.queryByText("installation devices")).not.toBeInTheDocument();
-  });
+const mockNavigate = jest.fn();
+jest.mock("react-router", () => ({
+  ...jest.requireActual("react-router"),
+  useNavigate: () => mockNavigate,
+  useLocation: jest.fn(),
+}));
 
-  it("does not render the result", () => {
-    installerRender(<ProposalPage />);
-    expect(screen.queryByText("result")).not.toBeInTheDocument();
-  });
+const mockSetUiState = jest.fn();
+jest.mock("~/context/storage-ui-state");
 
-  describe("if zFCP is not supported", () => {
-    beforeEach(() => {
-      mockUseZFCPSupported.mockReturnValue(false);
-    });
+// Mocking child components to simplify testing
+jest.mock("./ConfigEditor", () => () => <div>ConfigEditor</div>);
+jest.mock("./ConnectedDevicesMenu", () => () => <div>ConnectedDevicesMenu</div>);
+jest.mock("./EncryptionSection", () => () => <div>EncryptionSection</div>);
+jest.mock("./BootSection", () => () => <div>BootSection</div>);
+jest.mock("./FixableConfigInfo", () => () => <div>FixableConfigInfo</div>);
+jest.mock("./ProposalFailedInfo", () => () => <div>ProposalFailedInfo</div>);
+jest.mock("./ProposalResultSection", () => () => <div>ProposalResultSection</div>);
+jest.mock("./ProposalTransactionalInfo", () => () => <div>ProposalTransactionalInfo</div>);
+jest.mock("./UnsupportedModelInfo", () => () => <div>UnsupportedModelInfo</div>);
 
-    it("does not render an option for activating zFCP", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("link", { name: /zFCP/ })).not.toBeInTheDocument();
-    });
-  });
+// Mock i18n
+jest.mock("~/i18n", () => ({
+  _: (str: string) => str,
+  n_: (str: string) => str,
+  N_: (str: string) => str,
+}));
 
-  describe("if DASD is not supported", () => {
-    beforeEach(() => {
-      mockUseDASDSupported.mockReturnValue(false);
-    });
-
-    it("does not render an option for activating DASD", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("link", { name: /DASD/ })).not.toBeInTheDocument();
-    });
-  });
-
-  describe("if zFCP is supported", () => {
-    beforeEach(() => {
-      mockUseZFCPSupported.mockReturnValue(true);
-    });
-
-    it("renders an option for activating zFCP", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("link", { name: /zFCP/ })).toBeInTheDocument();
-    });
-  });
-
-  describe("if DASD is supported", () => {
-    beforeEach(() => {
-      mockUseDASDSupported.mockReturnValue(true);
-    });
-
-    it("renders an option for activating DASD", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("link", { name: /DASD/ })).toBeInTheDocument();
-    });
-  });
+// Mock react-router Link
+jest.mock("~/components/core/Link", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ({ children }: any) => <a>{children}</a>;
 });
 
-describe("if there is not a model", () => {
+const useAvailableDevicesMock = useAvailableDevices as jest.Mock;
+const useIssuesMock = useIssues as jest.Mock;
+const useProposalMock = useProposal as jest.Mock;
+const useStorageModelMock = useStorageModel as jest.Mock;
+const useProgressMock = useProgress as jest.Mock;
+const useLocationMock = useLocation as jest.Mock;
+const useStorageUiStateMock = useStorageUiState as jest.Mock;
+const useZFCPSupportedMock = useZFCPSupported as jest.Mock;
+const useDASDSupportedMock = useDASDSupported as jest.Mock;
+const useResetMock = useReset as jest.Mock;
+const useSystemMock = useSystem as jest.Mock;
+const useProductMock = useProduct as jest.Mock;
+
+describe("ProposalPage", () => {
   beforeEach(() => {
-    mockUseAvailableDevices.mockReturnValue([disk]);
-    mockUseConfigModel.mockReturnValue(null);
+    jest.clearAllMocks();
+    useLocationMock.mockReturnValue({ pathname: "/", state: null });
+    useProgressMock.mockReturnValue(null);
+    useAvailableDevicesMock.mockReturnValue([{}]);
+    useIssuesMock.mockReturnValue([]);
+    useStorageModelMock.mockReturnValue({});
+    useProposalMock.mockReturnValue({});
+    useStorageUiStateMock.mockReturnValue({
+      uiState: new Map(),
+      setUiState: mockSetUiState,
+    });
+    useResetMock.mockReturnValue(jest.fn());
+    useSystemMock.mockReturnValue(null);
+    useProductMock.mockReturnValue(null);
   });
 
-  describe("and there are system errors", () => {
+  it("navigates to progress page if installation is in progress", () => {
+    useProgressMock.mockReturnValue({ finished: false });
+    render(<ProposalPage />);
+    expect(mockNavigate).toHaveBeenCalledWith("/storage/progress");
+  });
+
+  it("does not navigate if installation is finished", () => {
+    useProgressMock.mockReturnValue({ finished: true });
+    render(<ProposalPage />);
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByText("Storage")).toBeInTheDocument();
+  });
+
+  it("resets UI state when required and then renders content", async () => {
+    useLocationMock.mockReturnValue({
+      pathname: "/",
+      state: { resetStorageUiState: true },
+    });
+
+    render(<ProposalPage />);
+
+    // The useEffect should trigger a re-render. We wait for the content to appear.
+    expect(await screen.findByText("Storage")).toBeInTheDocument();
+
+    // Check if the state was reset
+    expect(mockSetUiState).toHaveBeenCalledWith(new Map());
+  });
+
+  describe("ProposalPageContent", () => {
+    it("shows UnavailableDevicesEmptyState when no devices are available", async () => {
+      useAvailableDevicesMock.mockReturnValue([]);
+      render(<ProposalPage />);
+      expect(await screen.findByText("No devices found")).toBeInTheDocument();
+    });
+
+    it("shows InvalidConfigEmptyState for unfixable issues", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      const issues = [{ class: "some-unfixable-issue", description: "foo" }];
+      useIssuesMock.mockReturnValue(issues);
+      useStorageModelMock.mockReturnValue({}); // isModelEditable will be false
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("Invalid storage settings")).toBeInTheDocument();
+      expect(screen.getByText("foo")).toBeInTheDocument();
+    });
+
+    it("shows UnknownConfigEmptyState for unknown configuration", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue(null);
+      useProposalMock.mockReturnValue(null);
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("Unable to modify the settings")).toBeInTheDocument();
+    });
+
+    it("shows FixableConfigInfo for fixable issues", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      const issues = [{ class: "configNoRoot", description: "bar" }];
+      useIssuesMock.mockReturnValue(issues);
+      useStorageModelMock.mockReturnValue({}); // isModelEditable will be true
+      useProposalMock.mockReturnValue({});
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("FixableConfigInfo")).toBeInTheDocument();
+    });
+
+    it("shows ProposalFailedInfo when there is no proposal", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue({});
+      useProposalMock.mockReturnValue(null);
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("ProposalFailedInfo")).toBeInTheDocument();
+    });
+
+    it("shows UnsupportedModelInfo when there is no model", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue(null);
+      useProposalMock.mockReturnValue({});
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("UnsupportedModelInfo")).toBeInTheDocument();
+    });
+
+    it("shows ModelSection when model is available", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue({});
+      useProposalMock.mockReturnValue({});
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("Settings")).toBeInTheDocument();
+      expect(await screen.findByText("ConfigEditor")).toBeInTheDocument();
+    });
+
+    it("shows ProposalResultSection when proposal is available", async () => {
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue({});
+      useProposalMock.mockReturnValue({});
+
+      render(<ProposalPage />);
+      expect(await screen.findByText("ProposalResultSection")).toBeInTheDocument();
+    });
+  });
+
+  describe("UnavailableDevicesEmptyState", () => {
     beforeEach(() => {
-      mockUseSystemErrors.mockReturnValue([systemError]);
+      useAvailableDevicesMock.mockReturnValue([]);
     });
 
-    it("renders an option for resetting the config", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("button", { name: /Reset/ })).toBeInTheDocument();
+    it("renders basic message", async () => {
+      useZFCPSupportedMock.mockReturnValue(false);
+      useDASDSupportedMock.mockReturnValue(false);
+      render(<ProposalPage />);
+      expect(await screen.findByText("No devices found")).toBeInTheDocument();
+      expect(screen.getByText("Connect to iSCSI targets")).toBeInTheDocument();
+      expect(screen.queryByText("Activate zFCP disks")).not.toBeInTheDocument();
+      expect(screen.queryByText("Manage DASD devices")).not.toBeInTheDocument();
     });
 
-    it("does not render the installation devices", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("installation devices")).not.toBeInTheDocument();
+    it("renders zFCP link when supported", async () => {
+      useZFCPSupportedMock.mockReturnValue(true);
+      useDASDSupportedMock.mockReturnValue(false);
+      render(<ProposalPage />);
+      expect(await screen.findByText("Activate zFCP disks")).toBeInTheDocument();
+      expect(screen.queryByText("Manage DASD devices")).not.toBeInTheDocument();
     });
 
-    it("does not render the result", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("result")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("and there are not system errors", () => {
-    beforeEach(() => {
-      mockUseSystemErrors.mockReturnValue([]);
-    });
-
-    it("renders an unsupported model alert", async () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("unsupported info")).toBeInTheDocument();
-    });
-
-    it("does not render the installation devices", async () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("installation devices")).not.toBeInTheDocument();
-    });
-
-    it("renders the result", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("result")).toBeInTheDocument();
-    });
-  });
-});
-
-describe("if there is a model", () => {
-  beforeEach(() => {
-    mockUseAvailableDevices.mockReturnValue([disk]);
-    mockUseConfigModel.mockReturnValue({ drives: [] });
-  });
-
-  describe("and there are config errors and system errors", () => {
-    beforeEach(() => {
-      mockUseConfigErrors.mockReturnValue([configError]);
-      mockUseSystemErrors.mockReturnValue([systemError]);
-    });
-
-    it("renders the config errors", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("Config error")).toBeInTheDocument();
-    });
-
-    it("renders an option for resetting the config", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByRole("button", { name: /Reset/ })).toBeInTheDocument();
-    });
-
-    it("does not render the installation devices", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("installation devices")).not.toBeInTheDocument();
-    });
-
-    it("does not render the result", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("result")).not.toBeInTheDocument();
+    it("renders DASD link when supported", async () => {
+      useZFCPSupportedMock.mockReturnValue(false);
+      useDASDSupportedMock.mockReturnValue(true);
+      render(<ProposalPage />);
+      expect(await screen.findByText("Manage DASD devices")).toBeInTheDocument();
+      expect(screen.queryByText("Activate zFCP disks")).not.toBeInTheDocument();
     });
   });
 
-  describe("and there are not config errors but there are system errors", () => {
-    beforeEach(() => {
-      mockUseSystemErrors.mockReturnValue([systemError]);
-    });
+  describe("ModelSection", () => {
+    it("allows tab switching", async () => {
+      const setUiState = jest.fn();
+      useStorageUiStateMock.mockReturnValue({
+        uiState: new Map(),
+        setUiState,
+      });
+      useAvailableDevicesMock.mockReturnValue([{}]);
+      useIssuesMock.mockReturnValue([]);
+      useStorageModelMock.mockReturnValue({});
+      useProposalMock.mockReturnValue({});
 
-    it("renders a failed proposal failed", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("failed info")).toBeInTheDocument();
-    });
+      render(<ProposalPage />);
+      expect(await screen.findByText("Settings")).toBeInTheDocument();
 
-    it("renders the installation devices", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("installation devices")).toBeInTheDocument();
-    });
+      const encryptionTab = screen.getByText("Encryption");
+      fireEvent.click(encryptionTab);
 
-    it("does not render the result", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("result")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("and there are neither config errors nor system errors", () => {
-    beforeEach(() => {
-      mockUseSystemErrors.mockReturnValue([]);
-      mockUseConfigErrors.mockReturnValue([]);
-    });
-
-    it("renders the installation devices", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("installation devices")).toBeInTheDocument();
-    });
-
-    it("renders the result", () => {
-      installerRender(<ProposalPage />);
-      expect(screen.queryByText("result")).toBeInTheDocument();
+      expect(setUiState).toHaveBeenCalledTimes(1);
+      const callback = setUiState.mock.calls[0][0];
+      const newState = callback(new Map());
+      expect(newState.get("st")).toBe("1");
     });
   });
 });

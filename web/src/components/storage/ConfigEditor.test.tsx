@@ -24,32 +24,54 @@ import React from "react";
 import { screen } from "@testing-library/react";
 import { plainRender } from "~/test-utils";
 import ConfigEditor from "~/components/storage/ConfigEditor";
-import { StorageDevice } from "~/storage";
-import { apiModel } from "~/api/storage/types";
+import type { storage } from "~/model/system";
+import type { model as apiModel } from "~/model/storage";
 
-const disk: StorageDevice = {
+const disk: storage.Device = {
   sid: 60,
-  type: "disk",
-  isDrive: true,
-  description: "",
-  vendor: "Seagate",
-  model: "Unknown",
-  driver: ["ahci", "mmcblk"],
-  bus: "IDE",
   name: "/dev/vda",
-  size: 1e6,
+  class: "drive",
+  description: "",
+  drive: {
+    type: "disk",
+    vendor: "Seagate",
+    model: "Unknown",
+    driver: ["ahci", "mmcblk"],
+    bus: "IDE",
+  },
+  block: {
+    start: 0,
+    size: 1e6,
+    shrinking: { supported: false },
+  },
 };
 
 const mockUseDevices = jest.fn();
-jest.mock("~/queries/storage", () => ({
-  ...jest.requireActual("~/queries/storage"),
+jest.mock("~/hooks/api/system/storage", () => ({
+  ...jest.requireActual("~/hooks/api/system/storage"),
   useDevices: () => mockUseDevices(),
 }));
 
-const mockUseApiModel = jest.fn();
-jest.mock("~/hooks/storage/api-model", () => ({
-  ...jest.requireActual("~/hooks/storage/api-model"),
-  useApiModel: () => mockUseApiModel(),
+jest.mock("@patternfly/react-core", () => ({
+  ...jest.requireActual("@patternfly/react-core"),
+  Alert: ({ children, title }) => (
+    <div data-testid="mocked-alert-component">
+      <div>{title}</div>
+      {children}
+    </div>
+  ),
+}));
+
+const mockUseModel = jest.fn();
+jest.mock("~/hooks/storage/model", () => ({
+  ...jest.requireActual("~/hooks/storage/model"),
+  useModel: () => mockUseModel(),
+}));
+
+const mockReset = jest.fn();
+jest.mock("~/hooks/api/config/storage", () => ({
+  ...jest.requireActual("~/hooks/api/config/storage"),
+  useReset: () => mockReset,
 }));
 
 jest.mock("./DriveEditor", () => () => <div>drive editor</div>);
@@ -87,7 +109,7 @@ beforeEach(() => {
 
 describe("when no drive is used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasVolumeGroups);
+    mockUseModel.mockReturnValue(hasVolumeGroups);
   });
 
   it("does not render the drive editor", () => {
@@ -98,7 +120,7 @@ describe("when no drive is used for installation", () => {
 
 describe("when a drive is used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasDrives);
+    mockUseModel.mockReturnValue(hasDrives);
   });
 
   it("renders the drive editor", () => {
@@ -109,7 +131,7 @@ describe("when a drive is used for installation", () => {
 
 describe("when no volume group is used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasDrives);
+    mockUseModel.mockReturnValue(hasDrives);
   });
 
   it("does not render the volume group editor", () => {
@@ -120,7 +142,7 @@ describe("when no volume group is used for installation", () => {
 
 describe("when a volume group is used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasVolumeGroups);
+    mockUseModel.mockReturnValue(hasVolumeGroups);
   });
 
   it("renders the volume group editor", () => {
@@ -131,7 +153,7 @@ describe("when a volume group is used for installation", () => {
 
 describe("when both a drive and volume group are used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasBoth);
+    mockUseModel.mockReturnValue(hasBoth);
   });
 
   it("renders a volume group editor followed by drive editor", () => {
@@ -147,12 +169,11 @@ describe("when both a drive and volume group are used for installation", () => {
 
 describe("when neither a drive nor volume group are used for installation", () => {
   beforeEach(() => {
-    mockUseApiModel.mockReturnValue(hasNothing);
+    mockUseModel.mockReturnValue(hasNothing);
   });
 
   it("renders a no configuration alert with a button for resetting to default", () => {
     plainRender(<ConfigEditor />);
-    screen.getByText("Custom alert:");
     screen.getByText("No devices configured yet");
     screen.getByRole("button", { name: "reset to defaults" });
   });

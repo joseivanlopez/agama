@@ -33,7 +33,8 @@ const configQuery = {
 };
 
 function useConfig(): Config | null {
-  return useSuspenseQuery(configQuery)?.data;
+  const { data } = useSuspenseQuery(configQuery);
+  return data;
 }
 
 const extendedConfigQuery = {
@@ -42,7 +43,8 @@ const extendedConfigQuery = {
 };
 
 function useExtendedConfig(): Config | null {
-  return useSuspenseQuery(extendedConfigQuery)?.data;
+  const { data } = useSuspenseQuery(extendedConfigQuery);
+  return data;
 }
 
 // Returns the information of the current selected product from the list of products provided by
