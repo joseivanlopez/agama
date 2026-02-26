@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (c) [2025] SUSE LLC
+# Copyright (c) [2025-2026] SUSE LLC
 #
 # All Rights Reserved.
 #
@@ -42,12 +42,14 @@ module Agama
           textdomain "agama"
           super(PATH, logger: logger)
           @manager = manager
+          @system_json = generate_system_json
+          @config_json = generate_config_json
           register_progress_callbacks
         end
 
         dbus_interface "org.opensuse.Agama.Storage1.ISCSI" do
-          dbus_method(:GetSystem, "out system:s") { recover_system }
-          dbus_method(:GetConfig, "out config:s") { recover_config }
+          dbus_reader_attr_accessor :system_json, "s", dbus_name: "System"
+          dbus_reader_attr_accessor :config_json, "s", dbus_name: "Config"
           dbus_method(:SetConfig, "in serialized_config:s") do |serialized_config|
             configure(serialized_config)
           end
@@ -57,26 +59,6 @@ module Agama
           dbus_signal(:SystemChanged, "system:s")
           dbus_signal(:ProgressChanged, "progress:s")
           dbus_signal(:ProgressFinished)
-        end
-
-        # Gets the serialized system information.
-        #
-        # @return [String]
-        def recover_system
-          manager.probe unless manager.probed?
-
-          json = {
-            initiator: initiator_json,
-            targets:   targets_json
-          }
-          JSON.pretty_generate(json)
-        end
-
-        # Gets the serialized config.
-        #
-        # @return [String]
-        def recover_config
-          JSON.pretty_generate(manager.config_json)
         end
 
         # Applies the given serialized iSCSI config.
@@ -96,8 +78,8 @@ module Agama
           logger.info("Configuring iSCSI")
 
           start_progress(1, _("Configuring iSCSI"))
-          system_changed = manager.configure(config_json)
-          emit_system_changed if system_changed
+          manager.configure(config_json)
+          update_system_json
           finish_progress
         end
 
@@ -121,7 +103,7 @@ module Agama
 
           start_progress(1, _("Performing iSCSI discovery"))
           success = manager.discover(address, port, credentials: credentials)
-          emit_system_changed
+          update_system_json
           finish_progress
 
           success ? 0 : 1
@@ -132,9 +114,48 @@ module Agama
         # @return [Agama::Storage::ISCSI::Manager]
         attr_reader :manager
 
-        # Emits the SystemChanged signal
-        def emit_system_changed
-          self.SystemChanged(recover_system)
+        def register_progress_callbacks
+          on_progress_change { self.ProgressChanged(progress.to_json) }
+          on_progress_finish { self.ProgressFinished }
+        end
+
+        # Updates the system info if needed.
+        def update_system_json
+          system_json = generate_system_json
+          return if self.system_json == system_json
+
+          # This assignment emits a D-Bus PropertiesChanged.
+          self.system_json = system_json
+          self.SystemChanged(system_json)
+        end
+
+        # Updates the config info if needed.
+        def update_config_json
+          config_json = generate_config_json
+          return if self.config_json == config_json
+
+          # This assignment emits a D-Bus PropertiesChanged.
+          self.config_json = config_json
+        end
+
+        # Generates the serialized JSON of the system.
+        #
+        # @return [String]
+        def generate_system_json
+          manager.probe unless manager.probed?
+
+          json = {
+            initiator: initiator_json,
+            targets:   targets_json
+          }
+          JSON.pretty_generate(json)
+        end
+
+        # Generates the serialized JSON of the config.
+        #
+        # @return [String]
+        def generate_config_json
+          JSON.pretty_generate(manager.config_json)
         end
 
         # @return [Hash]
@@ -163,11 +184,6 @@ module Agama
             connected: node.connected?,
             locked:    node.locked?
           }
-        end
-
-        def register_progress_callbacks
-          on_progress_change { self.ProgressChanged(progress.to_json) }
-          on_progress_finish { self.ProgressFinished }
         end
       end
     end
