@@ -39,6 +39,7 @@ import DiscoverFormPage from "~/components/storage/iscsi/DiscoverFormPage";
 import DeviceSelectorPage from "~/components/storage/DeviceSelectorPage";
 import { STORAGE as PATHS } from "~/routes/paths";
 import InitiatorFormPage from "~/components/storage/iscsi/InitiatorFormPage";
+import NewStoragePage from "~/components/storage/NewStoragePage";
 
 const routes = (): Route => ({
   path: PATHS.root,
@@ -46,6 +47,10 @@ const routes = (): Route => ({
     {
       index: true,
       element: <ProposalPage />,
+    },
+    {
+      path: PATHS.mockup,
+      element: <NewStoragePage />,
     },
     {
       path: PATHS.editBootDevice,

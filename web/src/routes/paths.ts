@@ -78,6 +78,7 @@ const SOFTWARE = {
 
 const STORAGE = {
   root: "/storage",
+  mockup: "/storage/mockup",
   editBootDevice: "/storage/boot-device/edit",
   editEncryption: "/storage/encryption/edit",
   editSpacePolicy: "/storage/:collection/:index/space-policy/edit",
